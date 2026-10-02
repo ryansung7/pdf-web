@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>pdf-web | Web-Based PDF Toolkit</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- PDF-Lib for manipulation -->
+  <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+  <!-- PDF.js for rendering pages to canvas -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <style>
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-slate-800 bg-slate-950 sticky top-0 z-50 backdrop-blur-md">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="p-2 bg-indigo-600 rounded-lg text-white">
+          <i data-lucide="file-text" class="w-6 h-6"></i>
+        </div>
+        <div>
+          <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+            pdf-web
+            <span class="text-xs font-semibold px-2 py-0.5 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+              Browser Toolkit
+            </span>
+          </h1>
+          <p class="text-xs text-slate-400">Pure Browser PDF Processing Engine</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 text-xs text-slate-400">
+        <i data-lucide="shield-check" class="w-4 h-4 text-emerald-400"></i>
+        <span>Zero Server Uploads</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Area -->
+  <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 flex flex-col lg:flex-row gap-6">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="w-full lg:w-64 space-y-1 flex-shrink-0">
+      <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">Toolkit Modules</p>
+      
+      <button onclick="switchTab('bw')" id="tab-bw" class="tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-indigo-600 text-white">
+        <i data-lucide="sun-medium" class="w-4 h-4"></i><span>1. B/W Clean & Darken</span>
+      </button>
+
+      <button onclick="switchTab('split')" id="tab-split" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="scissors" class="w-4 h-4"></i><span>2. Page Splitter</span>
+      </button>
+
+      <button onclick="switchTab('rotate')" id="tab-rotate" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="rotate-cw" class="w-4 h-4"></i><span>3. Batch Rotator</span>
+      </button>
+
+      <button onclick="switchTab('merge')" id="tab-merge" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="combine" class="w-4 h-4"></i><span>4. PDF Merger</span>
+      </button>
+
+      <button onclick="switchTab('img2pdf')" id="tab-img2pdf" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="image" class="w-4 h-4"></i><span>5. Images to PDF</span>
+      </button>
+
+      <button onclick="switchTab('delete')" id="tab-delete" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="trash-2" class="w-4 h-4"></i><span>6. Delete Pages</span>
+      </button>
+
+      <button onclick="switchTab('insert')" id="tab-insert" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="file-plus-2" class="w-4 h-4"></i><span>7. Insert Pages</span>
+      </button>
+    </aside>
+
+    <!-- Workspace & Console Container -->
+    <section class="flex-1 flex flex-col gap-4">
+      
+      <!-- Module Workspace -->
+      <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 flex-1">
+        
+        <!-- Status Banner -->
+        <div id="status-banner" class="hidden mb-4 p-3 rounded-xl text-xs font-medium flex items-center justify-between"></div>
+
+        <!-- TAB 1: B/W Clean & Darken -->
+        <div id="panel-bw" class="panel space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="sun-medium" class="text-indigo-400"></i> 1. B/W Clean & Darken</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('bw-files').click()">
+              <i data-lucide="file-plus" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="bw-files-lbl" class="text-xs font-medium text-slate-300">Select Individual PDF File(s)</p>
+            </button>
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('bw-folder').click()">
+              <i data-lucide="folder-plus" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="bw-folder-lbl" class="text-xs font-medium text-slate-300">Select Whole Folder</p>
+            </button>
+            <input type="file" id="bw-files" multiple accept="application/pdf" class="hidden" onchange="handleSelection(this, 'bw-files-lbl')">
+            <input type="file" id="bw-folder" webkitdirectory directory class="hidden" onchange="handleSelection(this, 'bw-folder-lbl', true)">
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label class="block mb-1 text-slate-400">Cleaning Preset</label>
+              <select id="bw-preset" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+                <option value="standard">Standard B/W Doc (Levels Max 240)</option>
+                <option value="gimp">Color Paper Removal (GIMP Mono + Max 200)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-slate-400">Gamma Level (Darkness)</label>
+              <select id="bw-gamma" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+                <option value="0.10">Heavy (0.10)</option>
+                <option value="0.20" selected>Strong / GIMP (0.20)</option>
+                <option value="0.40">Medium (0.40)</option>
+                <option value="0.60">Light (0.60)</option>
+              </select>
+            </div>
+          </div>
+          <div class="text-xs">
+            <label class="block mb-1 text-slate-400">Untouched Pages (Pass-Through e.g., "1, 3-5")</label>
+            <input type="text" id="bw-pass" placeholder="Leave empty to clean all" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+          </div>
+          <button onclick="runBwClean()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="play" class="w-4 h-4"></i> Process Batch B/W Clean</button>
+        </div>
+
+        <!-- TAB 2: Page Splitter -->
+        <div id="panel-split" class="panel hidden space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="scissors" class="text-indigo-400"></i> 2. Page Splitter</h2>
+          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('split-file').click()">
+            <p id="split-file-lbl" class="text-xs font-medium text-slate-300">Select PDF File</p>
+            <input type="file" id="split-file" accept="application/pdf" class="hidden" onchange="handleSelection(this, 'split-file-lbl')">
+          </div>
+          <div class="space-y-2 text-xs">
+            <label class="block text-slate-400">Splitting Mode</label>
+            <label class="flex items-center gap-2"><input type="radio" name="split-mode" value="long" checked> Long-Side Splitter (Split A3 Double Pages into A4 Single Pages)</label>
+            <label class="flex items-center gap-2"><input type="radio" name="split-mode" value="range"> Extract Specific Range (e.g. "1-3, 5")</label>
+          </div>
+          <input type="text" id="split-range" placeholder="Pages to extract (e.g. 1-3, 5)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+          <button onclick="runSplitter()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="scissors" class="w-4 h-4"></i> Run Splitter</button>
+        </div>
+
+        <!-- TAB 3: Batch Rotator -->
+        <div id="panel-rotate" class="panel hidden space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="rotate-cw" class="text-indigo-400"></i> 3. Batch Rotator</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('rot-files').click()">
+              <i data-lucide="file-plus" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="rot-files-lbl" class="text-xs font-medium text-slate-300">Select PDF File(s)</p>
+            </button>
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('rot-folder').click()">
+              <i data-lucide="folder-plus" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="rot-folder-lbl" class="text-xs font-medium text-slate-300">Select Whole Folder</p>
+            </button>
+            <input type="file" id="rot-files" multiple accept="application/pdf" class="hidden" onchange="handleSelection(this, 'rot-files-lbl')">
+            <input type="file" id="rot-folder" webkitdirectory directory class="hidden" onchange="handleSelection(this, 'rot-folder-lbl', true)">
+          </div>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+            <div>
+              <label class="block mb-1 text-slate-400">Page Selection</label>
+              <select id="rot-rule" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+                <option value="all">Rotate ALL pages</option>
+                <option value="odd">Rotate ODD pages only</option>
+                <option value="even">Rotate EVEN pages only</option>
+                <option value="alt1">Alternate (Odd 90 / Even 270)</option>
+                <option value="range">Specific Range (e.g. "1, 3-5")</option>
+              </select>
+            </div>
+            <div>
+              <label class="block mb-1 text-slate-400">Rotation Angle</label>
+              <select id="rot-angle" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+                <option value="90">90° Clockwise</option>
+                <option value="180">180° Turnaround</option>
+                <option value="270">270° Counter-Clockwise</option>
+              </select>
+            </div>
+          </div>
+          <input type="text" id="rot-range" placeholder="Range (only if 'Specific Range' selected)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+          <button onclick="runRotate()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="rotate-cw" class="w-4 h-4"></i> Rotate PDF Pages</button>
+        </div>
+
+        <!-- TAB 4: PDF Merger -->
+        <div id="panel-merge" class="panel hidden space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="combine" class="text-indigo-400"></i> 4. PDF Merger</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('merge-files').click()">
+              <i data-lucide="files" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="merge-files-lbl" class="text-xs font-medium text-slate-300">Select Multiple PDF Files</p>
+            </button>
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('merge-folder').click()">
+              <i data-lucide="folder-plus" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="merge-folder-lbl" class="text-xs font-medium text-slate-300">Select PDF Folder</p>
+            </button>
+            <input type="file" id="merge-files" multiple accept="application/pdf" class="hidden" onchange="handleSelection(this, 'merge-files-lbl')">
+            <input type="file" id="merge-folder" webkitdirectory directory class="hidden" onchange="handleSelection(this, 'merge-folder-lbl', true)">
+          </div>
+          <button onclick="runMerge()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="combine" class="w-4 h-4"></i> Merge Files</button>
+        </div>
+
+        <!-- TAB 5: Images to PDF -->
+        <div id="panel-img2pdf" class="panel hidden space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="image" class="text-indigo-400"></i> 5. Images to PDF</h2>
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('img-files').click()">
+              <i data-lucide="images" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="img-files-lbl" class="text-xs font-medium text-slate-300">Select Image Files</p>
+            </button>
+            <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('img-folder').click()">
+              <i data-lucide="folder-plus" class="w-5 h-5 mx-auto mb-1 text-indigo-400"></i>
+              <p id="img-folder-lbl" class="text-xs font-medium text-slate-300">Select Image Folder</p>
+            </button>
+            <input type="file" id="img-files" multiple accept="image/*" class="hidden" onchange="handleSelection(this, 'img-files-lbl')">
+            <input type="file" id="img-folder" webkitdirectory directory class="hidden" onchange="handleSelection(this, 'img-folder-lbl', true)">
+          </div>
+          <button onclick="runImg2Pdf()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="file-output" class="w-4 h-4"></i> Convert Images to PDF</button>
+        </div>
+
+        <!-- TAB 6: Delete Pages -->
+        <div id="panel-delete" class="panel hidden space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="trash-2" class="text-indigo-400"></i> 6. Delete Pages</h2>
+          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('del-file').click()">
+            <p id="del-file-lbl" class="text-xs font-medium text-slate-300">Select PDF File</p>
+            <input type="file" id="del-file" accept="application/pdf" class="hidden" onchange="handleSelection(this, 'del-file-lbl')">
+          </div>
+          <input type="text" id="del-range" placeholder="Pages to DELETE (e.g. '1', '1,3', '2-5')" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+          <button onclick="runDeletePages()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="trash-2" class="w-4 h-4"></i> Delete Pages</button>
+        </div>
+
+        <!-- TAB 7: Insert Pages -->
+        <div id="panel-insert" class="panel hidden space-y-5">
+          <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="file-plus-2" class="text-indigo-400"></i> 7. Insert Pages</h2>
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('ins-target').click()">
+              <p id="ins-target-lbl" class="text-xs font-medium text-slate-300">Target PDF Document</p>
+              <input type="file" id="ins-target" accept="application/pdf" class="hidden" onchange="handleSelection(this, 'ins-target-lbl')">
+            </div>
+            <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('ins-source').click()">
+              <p id="ins-source-lbl" class="text-xs font-medium text-slate-300">Source File (PDF / Image)</p>
+              <input type="file" id="ins-source" accept="application/pdf,image/*" class="hidden" onchange="handleSelection(this, 'ins-source-lbl')">
+            </div>
+          </div>
+          <div class="text-xs">
+            <label class="block mb-1 text-slate-400">Insert AFTER Page Number (0 = At Very Beginning)</label>
+            <input type="number" id="ins-after" value="1" min="0" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white">
+          </div>
+          <button onclick="runInsertPages()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2"><i data-lucide="file-plus-2" class="w-4 h-4"></i> Insert Pages</button>
+        </div>
+
+      </div>
+
+      <!-- Generated Files Output History Manager -->
+      <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-emerald-400 flex items-center gap-1.5"><i data-lucide="download-cloud" class="w-3.5 h-3.5"></i> Generated Output Files (Download History)</span>
+          <span class="text-[10px] text-slate-500">Auto-downloaded to your browser Downloads folder</span>
+        </div>
+        <div id="output-history" class="bg-slate-900/90 rounded-lg p-3 text-xs text-slate-300 max-h-36 overflow-y-auto custom-scroll space-y-2">
+          <p class="text-slate-500 italic text-[11px]">No generated files yet. Run any tool above to output files.</p>
+        </div>
+      </div>
+
+      <!-- Execution Log Console -->
+      <div class="bg-slate-950/80 border border-slate-800 rounded-2xl p-4 flex flex-col h-40">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-semibold text-slate-400 flex items-center gap-1.5"><i data-lucide="terminal" class="w-3.5 h-3.5"></i> Execution Console</span>
+          <button onclick="document.getElementById('console-log').innerText=''" class="text-[10px] text-slate-500 hover:text-slate-300">Clear Log</button>
+        </div>
+        <div id="console-log" class="flex-1 bg-slate-900/90 rounded-lg p-3 font-mono text-[11px] text-emerald-400 overflow-y-auto custom-scroll space-y-1">
+          pdf-web engine ready.
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <script>
+    lucide.createIcons();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const activeFileStore = {};
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
+      document.querySelectorAll('.tab-btn').forEach(b => {
+        b.classList.remove('bg-indigo-600', 'text-white');
+        b.classList.add('text-slate-400', 'hover:bg-slate-800', 'hover:text-white');
+      });
+
+      document.getElementById(`panel-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`tab-${tabId}`);
+      activeBtn.classList.add('bg-indigo-600', 'text-white');
+      activeBtn.classList.remove('text-slate-400', 'hover:bg-slate-800', 'hover:text-white');
+    }
+
+    function log(msg) {
+      const consoleEl = document.getElementById('console-log');
+      consoleEl.innerHTML += `<div>[${new Date().toLocaleTimeString()}] ${msg}</div>`;
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function showStatus(msg, isErr = false) {
+      const b = document.getElementById('status-banner');
+      b.className = `mb-4 p-3 rounded-xl text-xs font-medium flex items-center justify-between ${isErr ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20' : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'}`;
+      b.innerHTML = `<span>${msg}</span><button onclick="this.parentElement.classList.add('hidden')">&times;</button>`;
+      b.classList.remove('hidden');
+    }
+
+    function sortFiles(fileList) {
+      return Array.from(fileList).sort((a, b) => {
+        const matchA = a.name.match(/Scan_(\d{8})_(\d{6})/);
+        const matchB = b.name.match(/Scan_(\d{8})_(\d{6})/);
+        if (matchA && matchB) {
+          return (matchA[1] + matchA[2]).localeCompare(matchB[1] + matchB[2]);
+        }
+        return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
+      });
+    }
+
+    function handleSelection(input, lblId, isFolder = false) {
+      if (!input.files || input.files.length === 0) return;
+      
+      let files = Array.from(input.files);
+      if (input.accept && input.accept.includes('pdf')) {
+        files = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
+      } else if (input.accept && input.accept.includes('image')) {
+        files = files.filter(f => /\.(jpg|jpeg|png|webp|bmp)$/i.test(f.name));
+      }
+
+      files = sortFiles(files);
+      activeFileStore[input.id] = files;
+
+      const lbl = document.getElementById(lblId);
+      if (isFolder) {
+        lbl.textContent = `Folder Selected (${files.length} valid file(s))`;
+      } else {
+        lbl.textContent = files.length === 1 ? files[0].name : `${files.length} file(s) selected`;
+      }
+      log(`Selected ${files.length} file(s) for input #${input.id}`);
+    }
+
+    function getActiveFiles(id, altId = null) {
+      if (activeFileStore[id] && activeFileStore[id].length > 0) return activeFileStore[id];
+      if (altId && activeFileStore[altId] && activeFileStore[altId].length > 0) return activeFileStore[altId];
+      return [];
+    }
+
+    function downloadBlob(bytes, filename, mimeType = 'application/pdf') {
+      const blob = new Blob([bytes], { type: mimeType });
+      const url = URL.createObjectURL(blob);
+      
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      link.click();
+
+      const historyBox = document.getElementById('output-history');
+      if (historyBox.querySelector('p')) historyBox.innerHTML = '';
+
+      const item = document.createElement('div');
+      item.className = 'flex items-center justify-between p-2 bg-slate-950/60 rounded-lg border border-slate-800';
+      item.innerHTML = `
+        <span class="truncate max-w-md text-emerald-400 font-medium">${filename}</span>
+        <a href="${url}" download="${filename}" class="px-2.5 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded text-[11px] flex items-center gap-1">
+          <i data-lucide="download" class="w-3 h-3"></i> Re-Download
+        </a>
+      `;
+      historyBox.prepend(item);
+      lucide.createIcons();
+    }
+
+    function parseRangeStr(rangeStr, totalPages) {
+      if (!rangeStr || !rangeStr.trim()) return new Set();
+      const pages = new Set();
+      rangeStr.split(',').forEach(part => {
+        part = part.trim();
+        if (part.includes('-')) {
+          const [s, e] = part.split('-').map(n => parseInt(n));
+          for (let i = s; i <= e; i++) if (i >= 1 && i <= totalPages) pages.add(i);
+        } else {
+          const p = parseInt(part);
+          if (p >= 1 && p <= totalPages) pages.add(p);
+        }
+      });
+      return pages;
+    }
+
+    // --- Module 1: B/W Clean ---
+    async function runBwClean() {
+      const files = getActiveFiles('bw-files', 'bw-folder');
+      if (files.length === 0) return showStatus('Select PDF file(s) or folder first.', true);
+
+      const gamma = parseFloat(document.getElementById('bw-gamma').value);
+      const isGimp = document.getElementById('bw-preset').value === 'gimp';
+      const untouched = parseRangeStr(document.getElementById('bw-pass').value, 9999);
+
+      for (let fIdx = 0; fIdx < files.length; fIdx++) {
+        const file = files[fIdx];
+        log(`Processing B/W Clean [${fIdx + 1}/${files.length}]: ${file.name}`);
+
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const newPdf = await PDFLib.PDFDocument.create();
+
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const viewport = page.getViewport({ scale: 2.0 });
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d');
+          canvas.width = viewport.width; canvas.height = viewport.height;
+          await page.render({ canvasContext: ctx, viewport }).promise;
+
+          if (!untouched.has(i)) {
+            const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imgData.data;
+            const maxVal = isGimp ? 200 : 240;
+
+            for (let j = 0; j < data.length; j += 4) {
+              let gray = isGimp ? (data[j]*0.333 + data[j+1]*0.333 + data[j+2]*0.333) : (data[j]*0.299 + data[j+1]*0.587 + data[j+2]*0.114);
+              let norm = Math.min(Math.max(gray / maxVal, 0), 1);
+              let corrected = Math.pow(norm, 1.0 / gamma) * 255;
+              data[j] = data[j+1] = data[j+2] = Math.min(Math.max(corrected, 0), 255);
+            }
+            ctx.putImageData(imgData, 0, 0);
+          }
+
+          const jpegUrl = canvas.toDataURL('image/jpeg', 0.85);
+          const imgBytes = await fetch(jpegUrl).then(r => r.arrayBuffer());
+          const embeddedImg = await newPdf.embedJpg(imgBytes);
+          const newPage = newPdf.addPage([viewport.width, viewport.height]);
+          newPage.drawImage(embeddedImg, { x: 0, y: 0, width: viewport.width, height: viewport.height });
+        }
+
+        const outBytes = await newPdf.save();
+        downloadBlob(outBytes, `${file.name.replace(/\.pdf$/i, '')}_bw.pdf`);
+      }
+      showStatus('B/W Batch Processing finished!');
+    }
+
+    // --- Module 2: Splitter ---
+    async function runSplitter() {
+      const files = getActiveFiles('split-file');
+      if (files.length === 0) return showStatus('Select a PDF file.', true);
+      const file = files[0];
+      const mode = document.querySelector('input[name="split-mode"]:checked').value;
+
+      const bytes = await file.arrayBuffer();
+      const srcPdf = await PDFLib.PDFDocument.load(bytes);
+      const newPdf = await PDFLib.PDFDocument.create();
+
+      if (mode === 'long') {
+        for (let i = 0; i < srcPdf.getPageCount(); i++) {
+          const page = srcPdf.getPage(i);
+          const { width, height } = page.getSize();
+          if (width > height) {
+            const [p1] = await newPdf.copyPages(srcPdf, [i]);
+            p1.setCropBox(0, 0, width / 2, height);
+            newPdf.addPage(p1);
+
+            const [p2] = await newPdf.copyPages(srcPdf, [i]);
+            p2.setCropBox(width / 2, 0, width / 2, height);
+            newPdf.addPage(p2);
+          } else {
+            const [p] = await newPdf.copyPages(srcPdf, [i]);
+            newPdf.addPage(p);
+          }
+        }
+      } else {
+        const pages = parseRangeStr(document.getElementById('split-range').value, srcPdf.getPageCount());
+        const indices = Array.from(pages).map(p => p - 1);
+        const copied = await newPdf.copyPages(srcPdf, indices);
+        copied.forEach(p => newPdf.addPage(p));
+      }
+
+      const outBytes = await newPdf.save();
+      downloadBlob(outBytes, `${file.name.replace(/\.pdf$/i, '')}_split.pdf`);
+      showStatus('Split task finished!');
+    }
+
+    // --- Module 3: Batch Rotator ---
+    async function runRotate() {
+      const files = getActiveFiles('rot-files', 'rot-folder');
+      if (files.length === 0) return showStatus('Select PDF file(s) or folder.', true);
+      const rule = document.getElementById('rot-rule').value;
+      const angle = parseInt(document.getElementById('rot-angle').value);
+
+      for (const file of files) {
+        log(`Rotating: ${file.name}`);
+        const bytes = await file.arrayBuffer();
+        const pdf = await PDFLib.PDFDocument.load(bytes);
+        const count = pdf.getPageCount();
+        const specPages = parseRangeStr(document.getElementById('rot-range').value, count);
+
+        pdf.getPages().forEach((p, idx) => {
+          const pNum = idx + 1;
+          let rot = false;
+          if (rule === 'all') rot = true;
+          else if (rule === 'odd' && pNum % 2 !== 0) rot = true;
+          else if (rule === 'even' && pNum % 2 === 0) rot = true;
+          else if (rule === 'range' && specPages.has(pNum)) rot = true;
+
+          if (rot) {
+            p.setRotation(PDFLib.degrees((p.getRotation().angle + angle) % 360));
+          } else if (rule === 'alt1') {
+            p.setRotation(PDFLib.degrees((p.getRotation().angle + (pNum % 2 !== 0 ? 90 : 270)) % 360));
+          }
+        });
+
+        const outBytes = await pdf.save();
+        downloadBlob(outBytes, `${file.name.replace(/\.pdf$/i, '')}_rotated.pdf`);
+      }
+      showStatus('Rotate task finished!');
+    }
+
+    // --- Module 4: PDF Merger ---
+    async function runMerge() {
+      const files = getActiveFiles('merge-files', 'merge-folder');
+      if (files.length < 2) return showStatus('Select at least 2 PDF files or a folder containing multiple PDFs.', true);
+
+      const mergedPdf = await PDFLib.PDFDocument.create();
+      for (const f of files) {
+        log(`Merging: ${f.name}`);
+        const b = await f.arrayBuffer();
+        const doc = await PDFLib.PDFDocument.load(b);
+        const copied = await mergedPdf.copyPages(doc, doc.getPageIndices());
+        copied.forEach(p => mergedPdf.addPage(p));
+      }
+
+      const outBytes = await mergedPdf.save();
+      downloadBlob(outBytes, 'merged_document.pdf');
+      showStatus('Merged successfully!');
+    }
+
+    // --- Module 5: Images to PDF ---
+    async function runImg2Pdf() {
+      const files = getActiveFiles('img-files', 'img-folder');
+      if (files.length === 0) return showStatus('Select image files or an image folder.', true);
+
+      const pdfDoc = await PDFLib.PDFDocument.create();
+      for (const f of files) {
+        log(`Converting Image: ${f.name}`);
+        const bytes = await f.arrayBuffer();
+        let img = f.type.includes('png') ? await pdfDoc.embedPng(bytes) : await pdfDoc.embedJpg(bytes);
+        const page = pdfDoc.addPage([img.width, img.height]);
+        page.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+      }
+
+      const outBytes = await pdfDoc.save();
+      downloadBlob(outBytes, 'images_converted.pdf');
+      showStatus('Images converted to PDF!');
+    }
+
+    // --- Module 6: Delete Pages ---
+    async function runDeletePages() {
+      const files = getActiveFiles('del-file');
+      if (files.length === 0) return showStatus('Select a PDF file.', true);
+      const file = files[0];
+
+      const bytes = await file.arrayBuffer();
+      const srcPdf = await PDFLib.PDFDocument.load(bytes);
+      const toDel = parseRangeStr(document.getElementById('del-range').value, srcPdf.getPageCount());
+
+      const newPdf = await PDFLib.PDFDocument.create();
+      for (let i = 1; i <= srcPdf.getPageCount(); i++) {
+        if (!toDel.has(i)) {
+          const [p] = await newPdf.copyPages(srcPdf, [i - 1]);
+          newPdf.addPage(p);
+        }
+      }
+
+      const outBytes = await newPdf.save();
+      downloadBlob(outBytes, `${file.name.replace(/\.pdf$/i, '')}_deleted.pdf`);
+      showStatus('Delete finished!');
+    }
+
+    // --- Module 7: Insert Pages ---
+    async function runInsertPages() {
+      const targetFiles = getActiveFiles('ins-target');
+      const sourceFiles = getActiveFiles('ins-source');
+      if (targetFiles.length === 0 || sourceFiles.length === 0) return showStatus('Select both target and source files.', true);
+
+      const targetFile = targetFiles[0];
+      const sourceFile = sourceFiles[0];
+      const insertAfter = parseInt(document.getElementById('ins-after').value);
+      
+      const targetPdf = await PDFLib.PDFDocument.load(await targetFile.arrayBuffer());
+      const newPdf = await PDFLib.PDFDocument.create();
+
+      let sourcePages = [];
+      if (sourceFile.name.toLowerCase().endsWith('.pdf')) {
+        const srcPdf = await PDFLib.PDFDocument.load(await sourceFile.arrayBuffer());
+        sourcePages = await newPdf.copyPages(srcPdf, srcPdf.getPageIndices());
+      } else {
+        const imgBytes = await sourceFile.arrayBuffer();
+        let img = sourceFile.type.includes('png') ? await newPdf.embedPng(imgBytes) : await newPdf.embedJpg(imgBytes);
+        const p = newPdf.addPage([img.width, img.height]);
+        p.drawImage(img, { x: 0, y: 0, width: img.width, height: img.height });
+        sourcePages = [p];
+      }
+
+      const totalTarget = targetPdf.getPageCount();
+      if (insertAfter === 0) sourcePages.forEach(p => newPdf.addPage(p));
+
+      for (let i = 0; i < totalTarget; i++) {
+        const [p] = await newPdf.copyPages(targetPdf, [i]);
+        newPdf.addPage(p);
+        if (i + 1 === insertAfter) sourcePages.forEach(sp => newPdf.addPage(sp));
+      }
+
+      const outBytes = await newPdf.save();
+      downloadBlob(outBytes, `${targetFile.name.replace(/\.pdf$/i, '')}_inserted.pdf`);
+      showStatus('Insertion finished!');
+    }
+  </script>
+</body>
+</html>
