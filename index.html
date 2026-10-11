@@ -440,7 +440,7 @@
       showStatus('B/W Batch Processing finished!');
     }
 
-    // --- Module 2: Splitter ---
+    // --- Module 2: Page Splitter ---
     async function runSplitter() {
       const files = getActiveFiles('split-file');
       if (files.length === 0) return showStatus('Select a PDF file.', true);
@@ -449,33 +449,113 @@
 
       const bytes = await file.arrayBuffer();
       const srcPdf = await PDFLib.PDFDocument.load(bytes);
-      const newPdf = await PDFLib.PDFDocument.create();
+      const modeRange = document.getElementById('split-range').value;
 
-      if (mode === 'long') {
-        for (let i = 0; i < srcPdf.getPageCount(); i++) {
-          const page = srcPdf.getPage(i);
-          const { width, height } = page.getSize();
-          if (width > height) {
-            const [p1] = await newPdf.copyPages(srcPdf, [i]);
-            p1.setCropBox(0, 0, width / 2, height);
-            newPdf.addPage(p1);
-
-            const [p2] = await newPdf.copyPages(srcPdf, [i]);
-            p2.setCropBox(width / 2, 0, width / 2, height);
-            newPdf.addPage(p2);
-          } else {
-            const [p] = await newPdf.copyPages(srcPdf, [i]);
-            newPdf.addPage(p);
-          }
-        }
-      } else {
-        const pages = parseRangeStr(document.getElementById('split-range').value, srcPdf.getPageCount());
+      if (mode === 'range') {
+        const newPdf = await PDFLib.PDFDocument.create();
+        const pages = parseRangeStr(modeRange, srcPdf.getPageCount());
         const indices = Array.from(pages).map(p => p - 1);
         const copied = await newPdf.copyPages(srcPdf, indices);
         copied.forEach(p => newPdf.addPage(p));
+        const outBytes = await newPdf.save();
+        downloadBlob(outBytes, `${file.name.replace(/\.pdf$/i, '')}_split.pdf`);
+        showStatus('Split task finished!');
+        return;
       }
 
-      const outBytes = await newPdf.save();
+      // Long-Side Splitter (Split A3 Double Pages into A4 Single Pages)
+      // Matches the precise algorithm in split.py
+      const pagesStore = [];
+
+      for (let i = 0; i < srcPdf.getPageCount(); i++) {
+        const page = srcPdf.getPage(i);
+        const size = page.getSize();
+        const left = 0;
+        const bottom = 0;
+        const right = size.width;
+        const top = size.height;
+        const width = right - left;
+        const height = top - bottom;
+
+        if (height <= 0 || width <= 0) {
+          log(`Warning: Invalid page dimensions on page ${i + 1}. Skipping.`);
+          continue;
+        }
+
+        const rotation = (page.getRotation().angle || 0) % 360;
+
+        let effectiveWidth, effectiveHeight;
+        if (rotation === 90 || rotation === 270) {
+          effectiveWidth = height;
+          effectiveHeight = width;
+        } else {
+          effectiveWidth = width;
+          effectiveHeight = height;
+        }
+
+        let box1, box2;
+
+        if (effectiveWidth > effectiveHeight) {
+          // Target: Split into visual Left and Right halves
+          if (rotation === 0) {
+            const midX = left + width / 2;
+            box1 = [left, bottom, midX, top];
+            box2 = [midX, bottom, right, top];
+          } else if (rotation === 90) {
+            const midY = bottom + height / 2;
+            box1 = [left, bottom, right, midY];
+            box2 = [left, midY, right, top];
+          } else if (rotation === 180) {
+            const midX = left + width / 2;
+            box1 = [midX, bottom, right, top];
+            box2 = [left, bottom, midX, top];
+          } else if (rotation === 270) {
+            const midY = bottom + height / 2;
+            box1 = [left, midY, right, top];
+            box2 = [left, bottom, right, midY];
+          }
+        } else {
+          // Target: Split into visual Bottom and Top halves
+          if (rotation === 0) {
+            const midY = bottom + height / 2;
+            box1 = [left, bottom, right, midY];
+            box2 = [left, midY, right, top];
+          } else if (rotation === 90) {
+            const midX = left + width / 2;
+            box1 = [midX, bottom, right, top];
+            box2 = [left, bottom, midX, top];
+          } else if (rotation === 180) {
+            const midY = bottom + height / 2;
+            box1 = [left, midY, right, top];
+            box2 = [left, bottom, right, midY];
+          } else if (rotation === 270) {
+            const midX = left + width / 2;
+            box1 = [left, bottom, midX, top];
+            box2 = [midX, bottom, right, top];
+          }
+        }
+
+        // Add both visual halves into temporary tracking array
+        pagesStore.push({ srcIndex: i, box: box1 });
+        pagesStore.push({ srcIndex: i, box: box2 });
+      }
+
+      // Book Ordering Fix from split.py: Move back cover (first visual left half) to the end
+      if (pagesStore.length > 1) {
+        pagesStore.push(pagesStore.shift());
+      }
+
+      // Build final PDF output
+      const finalPdf = await PDFLib.PDFDocument.create();
+      for (const item of pagesStore) {
+        const [p] = await finalPdf.copyPages(srcPdf, [item.srcIndex]);
+        const b = item.box;
+        p.setMediaBox(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+        p.setCropBox(b[0], b[1], b[2] - b[0], b[3] - b[1]);
+        finalPdf.addPage(p);
+      }
+
+      const outBytes = await finalPdf.save();
       downloadBlob(outBytes, `${file.name.replace(/\.pdf$/i, '')}_split.pdf`);
       showStatus('Split task finished!');
     }
