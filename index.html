@@ -50,7 +50,11 @@
     <aside class="w-full lg:w-64 space-y-1 flex-shrink-0">
       <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">Toolkit Modules</p>
       
-      <button onclick="switchTab('bw')" id="tab-bw" class="tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-indigo-600 text-white">
+      <button onclick="switchTab('deskew')" id="tab-deskew" class="tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-indigo-600 text-white">
+        <i data-lucide="compass" class="w-4 h-4"></i><span>★ Deskew & Align Scan</span>
+      </button>
+
+      <button onclick="switchTab('bw')" id="tab-bw" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
         <i data-lucide="sun-medium" class="w-4 h-4"></i><span>1. B/W Clean & Darken</span>
       </button>
 
@@ -88,8 +92,85 @@
         <!-- Status Banner -->
         <div id="status-banner" class="hidden mb-4 p-3 rounded-xl text-xs font-medium flex items-center justify-between"></div>
 
+        <!-- MODULE: Deskew & Scan Alignment -->
+        <div id="panel-deskew" class="panel space-y-5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i data-lucide="compass" class="text-indigo-400"></i> Deskew & Orientation Corrector
+            </h2>
+            <span class="text-xs text-slate-400">Robust border-isolated edge detection for scanned book pages</span>
+          </div>
+
+          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('deskew-file').click()">
+            <i data-lucide="file-up" class="w-6 h-6 mx-auto mb-1 text-indigo-400"></i>
+            <p id="deskew-file-lbl" class="text-xs font-medium text-slate-300">Select PDF or Scanned Image to Correct</p>
+            <p class="text-[11px] text-slate-500 mt-1">Accepts PDF, JPG, PNG</p>
+            <input type="file" id="deskew-file" accept="application/pdf,image/*" class="hidden" onchange="loadDeskewDocument(this)">
+          </div>
+
+          <!-- Controls Bar -->
+          <div id="deskew-controls" class="hidden space-y-4">
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <span class="text-xs font-medium text-slate-300">Global Tilt:</span>
+                <input type="range" id="deskew-angle-slider" min="-15" max="15" step="0.2" value="0" class="w-32 h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer" oninput="updateAllDeskewAngle(this.value)">
+                <span id="deskew-angle-val" class="font-mono text-xs text-indigo-400 w-12">0.0°</span>
+                
+                <button type="button" onclick="autoDetectAngle(false)" title="Auto-detect based on Page 1 and apply to all" class="px-2.5 py-1 text-xs bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200 font-medium flex items-center gap-1">
+                  <i data-lucide="wand-2" class="w-3.5 h-3.5 text-indigo-400"></i> Level Page 1
+                </button>
+                <button type="button" onclick="autoDetectAngle(true)" title="Calculates each page's unique tilt angle individually" class="px-3 py-1 text-xs bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-medium shadow flex items-center gap-1.5">
+                  <i data-lucide="sparkles" class="w-3.5 h-3.5"></i> Auto-Level ALL Pages
+                </button>
+              </div>
+
+              <!-- Global Batch Mode Applier -->
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-400">Batch Fit:</span>
+                <select id="global-fit-mode" onchange="applyGlobalFitMode(this.value)" class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-slate-200">
+                  <option value="same" selected>Just Tilt (Exact 1:1 Same Size)</option>
+                  <option value="zoom">Auto-Crop Zoom (No Blank Corners)</option>
+                  <option value="expand">Expand Frame (Keep All Content)</option>
+                </select>
+              </div>
+
+              <div class="flex items-center gap-1.5">
+                <button type="button" onclick="rotateAllPages(-90)" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg flex items-center gap-1"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> -90°</button>
+                <button type="button" onclick="rotateAllPages(90)" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg flex items-center gap-1"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> +90°</button>
+                <button type="button" onclick="rotateAllPages(180)" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs rounded-lg flex items-center gap-1"><i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 180°</button>
+              </div>
+            </div>
+
+            <!-- View & Layout Switcher -->
+            <div class="flex items-center justify-between pt-1">
+              <span class="text-xs text-slate-400">Click <b>⚡ Auto</b> on any individual page or adjust manually:</span>
+              <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
+                <span class="text-[11px] text-slate-500 px-1 font-medium">Layout:</span>
+                <button type="button" onclick="setGridColumns(1)" id="btn-col-1" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1">
+                  <i data-lucide="square" class="w-3 h-3"></i> 1 Col (Huge)
+                </button>
+                <button type="button" onclick="setGridColumns(2)" id="btn-col-2" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1">
+                  <i data-lucide="columns-2" class="w-3 h-3"></i> 2 Col (Large)
+                </button>
+                <button type="button" onclick="setGridColumns(3)" id="btn-col-3" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-medium flex items-center gap-1">
+                  <i data-lucide="grid-3x3" class="w-3 h-3"></i> 3 Col (Default)
+                </button>
+              </div>
+            </div>
+
+            <!-- Page Thumbnail Grid -->
+            <div>
+              <div id="deskew-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-[650px] overflow-y-auto custom-scroll p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl"></div>
+            </div>
+
+            <button onclick="applyDeskewAndSave()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white shadow-lg shadow-emerald-950">
+              <i data-lucide="check-circle" class="w-4 h-4"></i> Export Corrected PDF
+            </button>
+          </div>
+        </div>
+
         <!-- TAB 1: B/W Clean & Darken -->
-        <div id="panel-bw" class="panel space-y-5">
+        <div id="panel-bw" class="panel hidden space-y-5">
           <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="sun-medium" class="text-indigo-400"></i> 1. B/W Clean & Darken</h2>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <button type="button" class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-4 text-center bg-slate-900/50" onclick="document.getElementById('bw-files').click()">
@@ -282,6 +363,11 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     const activeFileStore = {};
+    const deskewState = {
+      file: null,
+      pages: [], // { pageNum, originalCanvas, rotation: 0, fineAngle: 0, fitMode: 'same' }
+      currentCols: 3
+    };
 
     function switchTab(tabId) {
       document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
@@ -388,6 +474,427 @@
       return pages;
     }
 
+    function setGridColumns(cols) {
+      deskewState.currentCols = cols;
+      const grid = document.getElementById('deskew-grid');
+      grid.classList.remove('md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3');
+      grid.classList.add(`md:grid-cols-${cols}`);
+
+      [1, 2, 3].forEach(c => {
+        const btn = document.getElementById(`btn-col-${c}`);
+        if (c === cols) {
+          btn.className = 'px-2.5 py-1 rounded bg-indigo-600 text-white font-medium flex items-center gap-1';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1';
+        }
+      });
+
+      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]' };
+      document.querySelectorAll('.preview-viewport').forEach(el => {
+        el.classList.remove('h-[750px]', 'h-[520px]', 'h-[360px]');
+        el.classList.add(heightMap[cols]);
+      });
+    }
+
+    function getRenderTransform(srcWidth, srcHeight, rotationDeg, fineAngleDeg, fitMode) {
+      const isOrthogonalSwap = (rotationDeg === 90 || rotationDeg === 270);
+      const baseW = isOrthogonalSwap ? srcHeight : srcWidth;
+      const baseH = isOrthogonalSwap ? srcWidth : srcHeight;
+
+      const fineRad = (fineAngleDeg * Math.PI) / 180;
+      const absFineRad = Math.abs(fineRad);
+      const cos = Math.cos(absFineRad);
+      const sin = Math.sin(absFineRad);
+
+      let targetW = baseW;
+      let targetH = baseH;
+      let scale = 1.0;
+
+      if (fitMode === 'same') {
+        targetW = baseW;
+        targetH = baseH;
+        scale = 1.0;
+      } else if (fitMode === 'zoom') {
+        targetW = baseW;
+        targetH = baseH;
+        if (absFineRad > 0.0001) {
+          const scaleW = cos + (baseH / baseW) * sin;
+          const scaleH = cos + (baseW / baseH) * sin;
+          scale = Math.max(scaleW, scaleH);
+        }
+      } else if (fitMode === 'expand') {
+        targetW = Math.round(baseW * cos + baseH * sin);
+        targetH = Math.round(baseW * sin + baseH * cos);
+        scale = 1.0;
+      }
+
+      return {
+        targetW,
+        targetH,
+        scale,
+        totalAngleRad: ((rotationDeg + fineAngleDeg) * Math.PI) / 180
+      };
+    }
+
+    function applyGlobalFitMode(mode) {
+      deskewState.pages.forEach((p, idx) => {
+        p.fitMode = mode;
+        const sel = document.getElementById(`page-mode-sel-${idx}`);
+        if (sel) sel.value = mode;
+        drawPagePreview(idx);
+      });
+    }
+
+    function updateSinglePageMode(idx, mode) {
+      deskewState.pages[idx].fitMode = mode;
+      drawPagePreview(idx);
+    }
+
+    async function loadDeskewDocument(input) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      deskewState.file = file;
+      deskewState.pages = [];
+
+      document.getElementById('deskew-file-lbl').textContent = file.name;
+      log(`Loading file for deskewing: ${file.name}`);
+      document.getElementById('deskew-controls').classList.remove('hidden');
+
+      const grid = document.getElementById('deskew-grid');
+      grid.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-slate-400">Rendering high-res preview pages...</div>';
+
+      try {
+        const defaultMode = document.getElementById('global-fit-mode').value || 'same';
+
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const c = document.createElement('canvas');
+            c.width = viewport.width;
+            c.height = viewport.height;
+            await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
+            deskewState.pages.push({
+              pageNum: i,
+              originalCanvas: c,
+              rotation: 0,
+              fineAngle: 0,
+              fitMode: defaultMode
+            });
+          }
+        } else {
+          const img = new Image();
+          img.src = URL.createObjectURL(file);
+          await new Promise(res => img.onload = res);
+          const c = document.createElement('canvas');
+          c.width = img.width;
+          c.height = img.height;
+          c.getContext('2d').drawImage(img, 0, 0);
+          deskewState.pages.push({
+            pageNum: 1,
+            originalCanvas: c,
+            rotation: 0,
+            fineAngle: 0,
+            fitMode: defaultMode
+          });
+        }
+
+        renderDeskewGrid();
+        log(`Loaded ${deskewState.pages.length} pages for orientation/deskew.`);
+      } catch (err) {
+        log(`Error loading file: ${err.message}`);
+        showStatus('Failed to load document for preview: ' + err.message, true);
+      }
+    }
+
+    function renderDeskewGrid() {
+      const grid = document.getElementById('deskew-grid');
+      grid.innerHTML = '';
+      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]' };
+      const currentHeightClass = heightMap[deskewState.currentCols] || 'h-[360px]';
+
+      deskewState.pages.forEach((p, idx) => {
+        const card = document.createElement('div');
+        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col items-center gap-2';
+
+        const previewContainer = document.createElement('div');
+        previewContainer.className = `preview-viewport w-full ${currentHeightClass} flex items-center justify-center overflow-hidden bg-black/60 rounded-lg p-2 border border-slate-800 relative`;
+
+        const previewCanvas = document.createElement('canvas');
+        previewCanvas.id = `deskew-canvas-${idx}`;
+        previewCanvas.className = 'max-w-full max-h-full object-contain shadow';
+        previewContainer.appendChild(previewCanvas);
+
+        const controls = document.createElement('div');
+        controls.className = 'flex items-center justify-between w-full text-xs text-slate-300 mt-1';
+        controls.innerHTML = `
+          <div class="flex items-center gap-1.5">
+            <span class="font-semibold text-slate-300">Page ${p.pageNum}</span>
+            <button onclick="autoDetectSinglePage(${idx})" title="Auto-detect tilt for this page only" class="px-1.5 py-0.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded text-[10px] font-medium flex items-center gap-1">
+              <i data-lucide="zap" class="w-3 h-3"></i> Auto
+            </button>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <button onclick="rotateSinglePage(${idx}, -90)" title="Rotate -90°" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[11px] flex items-center gap-1"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> -90°</button>
+            <button onclick="rotateSinglePage(${idx}, 90)" title="Rotate +90°" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[11px] flex items-center gap-1"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> +90°</button>
+          </div>
+        `;
+
+        const sliderRow = document.createElement('div');
+        sliderRow.className = 'w-full flex items-center justify-between gap-3 text-xs text-slate-400 bg-slate-950/60 px-2 py-1.5 rounded-lg border border-slate-800/60';
+        sliderRow.innerHTML = `
+          <span class="text-[11px] font-medium text-slate-400">Tilt:</span>
+          <input type="range" id="page-slider-${idx}" min="-15" max="15" step="0.2" value="${p.fineAngle}" class="flex-1 h-2 bg-slate-700 rounded appearance-none cursor-pointer" oninput="updateSinglePageAngle(${idx}, this.value)">
+          <span id="page-angle-lbl-${idx}" class="font-mono text-indigo-400 w-12 text-right font-medium">${p.fineAngle.toFixed(1)}°</span>
+        `;
+
+        const modeRow = document.createElement('div');
+        modeRow.className = 'w-full flex items-center justify-between text-xs text-slate-400 bg-slate-950/60 px-2 py-1.5 rounded-lg border border-slate-800/60';
+        modeRow.innerHTML = `
+          <span class="text-[11px] font-medium text-slate-400">Page Mode:</span>
+          <select id="page-mode-sel-${idx}" onchange="updateSinglePageMode(${idx}, this.value)" class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-[11px] text-slate-200 focus:outline-none">
+            <option value="same" ${p.fitMode === 'same' ? 'selected' : ''}>Just Tilt (Same 1:1 Size)</option>
+            <option value="zoom" ${p.fitMode === 'zoom' ? 'selected' : ''}>Auto-Crop Zoom</option>
+            <option value="expand" ${p.fitMode === 'expand' ? 'selected' : ''}>Expand Frame</option>
+          </select>
+        `;
+
+        card.appendChild(previewContainer);
+        card.appendChild(controls);
+        card.appendChild(sliderRow);
+        card.appendChild(modeRow);
+        grid.appendChild(card);
+
+        drawPagePreview(idx);
+      });
+
+      lucide.createIcons();
+    }
+
+    function drawPagePreview(idx) {
+      const p = deskewState.pages[idx];
+      const previewCanvas = document.getElementById(`deskew-canvas-${idx}`);
+      if (!previewCanvas) return;
+
+      const src = p.originalCanvas;
+      const { targetW, targetH, scale, totalAngleRad } = getRenderTransform(
+        src.width, 
+        src.height, 
+        p.rotation, 
+        p.fineAngle, 
+        p.fitMode || 'same'
+      );
+
+      previewCanvas.width = targetW;
+      previewCanvas.height = targetH;
+      const ctx = previewCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, targetW, targetH);
+
+      ctx.save();
+      ctx.translate(targetW / 2, targetH / 2);
+      ctx.rotate(totalAngleRad);
+      ctx.scale(scale, scale);
+      ctx.drawImage(src, -src.width / 2, -src.height / 2);
+      ctx.restore();
+    }
+
+    function rotateSinglePage(idx, deg) {
+      deskewState.pages[idx].rotation = (deskewState.pages[idx].rotation + deg) % 360;
+      if (deskewState.pages[idx].rotation < 0) deskewState.pages[idx].rotation += 360;
+      drawPagePreview(idx);
+    }
+
+    function rotateAllPages(deg) {
+      deskewState.pages.forEach((p, idx) => {
+        p.rotation = (p.rotation + deg) % 360;
+        if (p.rotation < 0) p.rotation += 360;
+        drawPagePreview(idx);
+      });
+    }
+
+    function updateSinglePageAngle(idx, val) {
+      const angle = parseFloat(val);
+      deskewState.pages[idx].fineAngle = angle;
+      const lbl = document.getElementById(`page-angle-lbl-${idx}`);
+      if (lbl) lbl.textContent = `${angle.toFixed(1)}°`;
+      const slider = document.getElementById(`page-slider-${idx}`);
+      if (slider) slider.value = angle;
+      drawPagePreview(idx);
+    }
+
+    function updateAllDeskewAngle(val) {
+      const angle = parseFloat(val);
+      document.getElementById('deskew-angle-val').textContent = `${angle.toFixed(1)}°`;
+      deskewState.pages.forEach((p, idx) => {
+        p.fineAngle = angle;
+        const lbl = document.getElementById(`page-angle-lbl-${idx}`);
+        if (lbl) lbl.textContent = `${angle.toFixed(1)}°`;
+        const slider = document.getElementById(`page-slider-${idx}`);
+        if (slider) slider.value = angle;
+        drawPagePreview(idx);
+      });
+    }
+
+    // --- High Accuracy Border-Immune Deskew Engine ---
+    // Specifically ignores black flatbed scanner borders and table boundaries
+    function computePageDeskew(sourceCanvas) {
+      const fullW = sourceCanvas.width;
+      const fullH = sourceCanvas.height;
+
+      // Safe Central Region: Ignore outer 12% border (eliminates scanner shadows & black frames)
+      const cropX = Math.floor(fullW * 0.12);
+      const cropY = Math.floor(fullH * 0.12);
+      const cropW = Math.floor(fullW * 0.76);
+      const cropH = Math.floor(fullH * 0.76);
+
+      // Downsample ROI to ~600px width for fast computation
+      const targetW = 600;
+      const scale = targetW / cropW;
+      const targetH = Math.round(cropH * scale);
+
+      const roiCanvas = document.createElement('canvas');
+      roiCanvas.width = targetW;
+      roiCanvas.height = targetH;
+      const ctx = roiCanvas.getContext('2d');
+      ctx.drawImage(sourceCanvas, cropX, cropY, cropW, cropH, 0, 0, targetW, targetH);
+
+      const imgData = ctx.getImageData(0, 0, targetW, targetH);
+      const d = imgData.data;
+
+      // Extract horizontal edge gradients (Sobel Horizontal derivative |dy|)
+      // Vertical text baselines produce sharp spikes in dy across lines
+      const edgeMap = new Uint8Array(targetW * targetH);
+      for (let y = 1; y < targetH - 1; y++) {
+        for (let x = 0; x < targetW; x++) {
+          const top = 0.299 * d[((y - 1) * targetW + x) * 4] + 0.587 * d[((y - 1) * targetW + x) * 4 + 1] + 0.114 * d[((y - 1) * targetW + x) * 4 + 2];
+          const btm = 0.299 * d[((y + 1) * targetW + x) * 4] + 0.587 * d[((y + 1) * targetW + x) * 4 + 1] + 0.114 * d[((y + 1) * targetW + x) * 4 + 2];
+          const dy = Math.abs(btm - top);
+          edgeMap[y * targetW + x] = dy > 30 ? 1 : 0; // Filter subtle noise
+        }
+      }
+
+      let bestAngle = 0;
+      let maxVariance = -1;
+
+      // Fine search from -7.0 to +7.0 in 0.2-degree steps
+      for (let a = -7.0; a <= 7.0; a += 0.2) {
+        const rad = (a * Math.PI) / 180;
+        const cos = Math.cos(rad);
+        const sin = Math.sin(rad);
+        const rowSums = new Float64Array(targetH);
+
+        for (let y = 0; y < targetH; y += 2) {
+          let sum = 0;
+          for (let x = 0; x < targetW; x += 2) {
+            const nx = Math.floor(x * cos - y * sin);
+            const ny = Math.floor(x * sin + y * cos);
+            if (nx >= 0 && nx < targetW && ny >= 0 && ny < targetH) {
+              if (edgeMap[ny * targetW + nx] === 1) sum++;
+            }
+          }
+          rowSums[y] = sum;
+        }
+
+        let mean = 0, count = 0;
+        for (let i = 0; i < targetH; i += 2) { mean += rowSums[i]; count++; }
+        mean /= count;
+        let variance = 0;
+        for (let i = 0; i < targetH; i += 2) { variance += Math.pow(rowSums[i] - mean, 2); }
+
+        if (variance > maxVariance) {
+          maxVariance = variance;
+          bestAngle = a;
+        }
+      }
+
+      return parseFloat((-bestAngle).toFixed(1));
+    }
+
+    // Auto-detect single page
+    function autoDetectSinglePage(idx) {
+      const page = deskewState.pages[idx];
+      log(`Detecting tilt on Page ${page.pageNum}...`);
+      const tilt = computePageDeskew(page.originalCanvas);
+      updateSinglePageAngle(idx, tilt);
+      showStatus(`Page ${page.pageNum} auto-leveled by ${tilt > 0 ? '+' : ''}${tilt}°`);
+      log(`Page ${page.pageNum} leveled: ${tilt}°`);
+    }
+
+    // Global / Multi-page auto detect
+    async function autoDetectAngle(allPagesIndividually = true) {
+      if (deskewState.pages.length === 0) return;
+      showStatus('Analyzing page tilt (ignoring scanner borders)...', false);
+      log('Running border-isolated deskew analysis...');
+
+      if (allPagesIndividually) {
+        // Evaluate each page on its own
+        for (let i = 0; i < deskewState.pages.length; i++) {
+          const tilt = computePageDeskew(deskewState.pages[i].originalCanvas);
+          updateSinglePageAngle(i, tilt);
+        }
+        showStatus('All pages leveled individually based on text baselines!');
+        log('All pages auto-leveled individually.');
+      } else {
+        // Evaluate Page 1 and apply globally
+        const tilt = computePageDeskew(deskewState.pages[0].originalCanvas);
+        document.getElementById('deskew-angle-slider').value = tilt;
+        updateAllDeskewAngle(tilt);
+        showStatus(`Global tilt set to ${tilt > 0 ? '+' : ''}${tilt}° (from Page 1)`);
+        log(`Global tilt set to: ${tilt}°`);
+      }
+    }
+
+    async function applyDeskewAndSave() {
+      if (deskewState.pages.length === 0) return showStatus('No document loaded.', true);
+      log('Exporting deskewed document...');
+
+      const newPdf = await PDFLib.PDFDocument.create();
+
+      for (let i = 0; i < deskewState.pages.length; i++) {
+        const p = deskewState.pages[i];
+        log(`Rendering output page ${i + 1}/${deskewState.pages.length} [Mode: ${p.fitMode}, Tilt: ${p.fineAngle}°]...`);
+
+        const src = p.originalCanvas;
+        const { targetW, targetH, scale, totalAngleRad } = getRenderTransform(
+          src.width, 
+          src.height, 
+          p.rotation, 
+          p.fineAngle, 
+          p.fitMode || 'same'
+        );
+
+        const outCanvas = document.createElement('canvas');
+        outCanvas.width = targetW;
+        outCanvas.height = targetH;
+        const ctx = outCanvas.getContext('2d');
+
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, targetW, targetH);
+
+        ctx.save();
+        ctx.translate(targetW / 2, targetH / 2);
+        ctx.rotate(totalAngleRad);
+        ctx.scale(scale, scale);
+        ctx.drawImage(src, -src.width / 2, -src.height / 2);
+        ctx.restore();
+
+        const jpegUrl = outCanvas.toDataURL('image/jpeg', 0.93);
+        const imgBytes = await fetch(jpegUrl).then(r => r.arrayBuffer());
+        const embeddedImg = await newPdf.embedJpg(imgBytes);
+
+        const newPage = newPdf.addPage([targetW, targetH]);
+        newPage.drawImage(embeddedImg, { x: 0, y: 0, width: targetW, height: targetH });
+      }
+
+      const outBytes = await newPdf.save();
+      const originalName = deskewState.file.name.replace(/\.[^/.]+$/, "");
+      downloadBlob(outBytes, `${originalName}_oriented.pdf`);
+      showStatus('Orientation & deskew correction exported successfully!');
+    }
+
     // --- Module 1: B/W Clean ---
     async function runBwClean() {
       const files = getActiveFiles('bw-files', 'bw-folder');
@@ -464,7 +971,6 @@
       }
 
       // Long-Side Splitter (Split A3 Double Pages into A4 Single Pages)
-      // Matches the precise algorithm in split.py
       const pagesStore = [];
 
       for (let i = 0; i < srcPdf.getPageCount(); i++) {
@@ -496,7 +1002,6 @@
         let box1, box2;
 
         if (effectiveWidth > effectiveHeight) {
-          // Target: Split into visual Left and Right halves
           if (rotation === 0) {
             const midX = left + width / 2;
             box1 = [left, bottom, midX, top];
@@ -515,7 +1020,6 @@
             box2 = [left, bottom, right, midY];
           }
         } else {
-          // Target: Split into visual Bottom and Top halves
           if (rotation === 0) {
             const midY = bottom + height / 2;
             box1 = [left, bottom, right, midY];
@@ -535,17 +1039,14 @@
           }
         }
 
-        // Add both visual halves into temporary tracking array
         pagesStore.push({ srcIndex: i, box: box1 });
         pagesStore.push({ srcIndex: i, box: box2 });
       }
 
-      // Book Ordering Fix from split.py: Move back cover (first visual left half) to the end
       if (pagesStore.length > 1) {
         pagesStore.push(pagesStore.shift());
       }
 
-      // Build final PDF output
       const finalPdf = await PDFLib.PDFDocument.create();
       for (const item of pagesStore) {
         const [p] = await finalPdf.copyPages(srcPdf, [item.srcIndex]);
