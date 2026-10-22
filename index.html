@@ -15,6 +15,16 @@
   <style>
     .custom-scroll::-webkit-scrollbar { width: 6px; }
     .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
+    .dragging-card {
+      opacity: 0.4;
+      transform: scale(0.98);
+      border-style: dashed !important;
+      border-color: #6366f1 !important;
+    }
+    .drag-over-card {
+      outline: 2px solid #818cf8;
+      outline-offset: 2px;
+    }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
@@ -52,6 +62,10 @@
       
       <button onclick="switchTab('deskew')" id="tab-deskew" class="tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-indigo-600 text-white">
         <i data-lucide="compass" class="w-4 h-4"></i><span>★ Deskew & Align Scan</span>
+      </button>
+
+      <button onclick="switchTab('extract')" id="tab-extract" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="check-square" class="w-4 h-4"></i><span>★ Visual Page Extractor</span>
       </button>
 
       <button onclick="switchTab('bw')" id="tab-bw" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
@@ -98,7 +112,7 @@
             <h2 class="text-lg font-bold text-white flex items-center gap-2">
               <i data-lucide="compass" class="text-indigo-400"></i> Deskew & Orientation Corrector
             </h2>
-            <span class="text-xs text-slate-400">Robust border-isolated edge detection for scanned book pages</span>
+            <span class="text-xs text-slate-400">Drag cards to reorder, level tilted scans, and preserve 1:1 scale</span>
           </div>
 
           <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('deskew-file').click()">
@@ -143,7 +157,7 @@
 
             <!-- View & Layout Switcher -->
             <div class="flex items-center justify-between pt-1">
-              <span class="text-xs text-slate-400">Click <b>⚡ Auto</b> on any individual page or adjust manually:</span>
+              <span class="text-xs text-slate-400">Drag cards or use <b>← / →</b> to reorder sequence:</span>
               <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs">
                 <span class="text-[11px] text-slate-500 px-1 font-medium">Layout:</span>
                 <button type="button" onclick="setGridColumns(1)" id="btn-col-1" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1">
@@ -165,6 +179,75 @@
 
             <button onclick="applyDeskewAndSave()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white shadow-lg shadow-emerald-950">
               <i data-lucide="check-circle" class="w-4 h-4"></i> Export Corrected PDF
+            </button>
+          </div>
+        </div>
+
+        <!-- MODULE: Visual Page Extractor & Reorder -->
+        <div id="panel-extract" class="panel hidden space-y-5">
+          <div class="flex items-center justify-between">
+            <h2 class="text-lg font-bold text-white flex items-center gap-2">
+              <i data-lucide="check-square" class="text-indigo-400"></i> Visual Page Extractor & Reorder
+            </h2>
+            <span class="text-xs text-slate-400">Drag to reorder sequence, pick pages, and export in custom order</span>
+          </div>
+
+          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('extract-file').click()">
+            <i data-lucide="file-search" class="w-6 h-6 mx-auto mb-1 text-indigo-400"></i>
+            <p id="extract-file-lbl" class="text-xs font-medium text-slate-300">Select PDF File to Inspect, Reorder & Extract</p>
+            <p class="text-[11px] text-slate-500 mt-1">Accepts PDF files</p>
+            <input type="file" id="extract-file" accept="application/pdf" class="hidden" onchange="loadExtractDocument(this)">
+          </div>
+
+          <div id="extract-controls" class="hidden space-y-4">
+            <!-- Toolbar -->
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3">
+              <div class="flex items-center gap-2 flex-wrap text-xs">
+                <span class="font-medium text-slate-300">Quick Select:</span>
+                <button type="button" onclick="extractSelectAll(true)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Select All</button>
+                <button type="button" onclick="extractSelectAll(false)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Deselect All</button>
+                <button type="button" onclick="extractSelectOddEven('odd')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Odd Pages</button>
+                <button type="button" onclick="extractSelectOddEven('even')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Even Pages</button>
+                <button type="button" onclick="extractInvertSelection()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Invert</button>
+              </div>
+
+              <!-- Selected count badge -->
+              <div class="flex items-center gap-2 text-xs">
+                <span class="text-slate-400">Selected:</span>
+                <span id="extract-count-badge" class="font-mono text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">0 pages</span>
+              </div>
+            </div>
+
+            <!-- Range text input syncer + column layout picker -->
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
+              <div class="w-full sm:flex-1 flex items-center gap-2 text-xs">
+                <span class="text-slate-400 whitespace-nowrap">Selected Sequence:</span>
+                <input type="text" id="extract-range-input" placeholder="e.g. 1-3, 5, 8" onchange="syncExtractRangeFromInput(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
+              </div>
+
+              <!-- 1 / 2 / 3 Column View Selector -->
+              <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs flex-shrink-0">
+                <span class="text-[11px] text-slate-500 px-1 font-medium">Layout:</span>
+                <button type="button" onclick="setExtractGridColumns(1)" id="btn-ext-col-1" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1">
+                  <i data-lucide="square" class="w-3 h-3"></i> 1 Col (Huge)
+                </button>
+                <button type="button" onclick="setExtractGridColumns(2)" id="btn-ext-col-2" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1">
+                  <i data-lucide="columns-2" class="w-3 h-3"></i> 2 Col (Large)
+                </button>
+                <button type="button" onclick="setExtractGridColumns(3)" id="btn-ext-col-3" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-medium flex items-center gap-1">
+                  <i data-lucide="grid-3x3" class="w-3 h-3"></i> 3 Col (Default)
+                </button>
+              </div>
+            </div>
+
+            <!-- Page Preview Grid -->
+            <div>
+              <p class="text-xs text-slate-400 mb-2"><b>Drag cards to reorder sequence</b> or click thumbnail to pick pages for extraction:</p>
+              <div id="extract-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-[650px] overflow-y-auto custom-scroll p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl"></div>
+            </div>
+
+            <button onclick="applyExtractAndSave()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white shadow-lg shadow-emerald-950">
+              <i data-lucide="download" class="w-4 h-4"></i> Extract & Save in Displayed Sequence
             </button>
           </div>
         </div>
@@ -363,10 +446,22 @@
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
     const activeFileStore = {};
+    
+    // Deskew State
     const deskewState = {
       file: null,
-      pages: [], // { pageNum, originalCanvas, rotation: 0, fineAngle: 0, fitMode: 'same' }
-      currentCols: 3
+      pages: [], // { origIndex, pageNum, originalCanvas, rotation: 0, fineAngle: 0, fitMode: 'same' }
+      currentCols: 3,
+      draggedIdx: null
+    };
+
+    // Extract State
+    const extractState = {
+      file: null,
+      pdfDoc: null,
+      pages: [], // { origIndex, pageNum, canvas, selected: false }
+      currentCols: 3,
+      draggedIdx: null
     };
 
     function switchTab(tabId) {
@@ -474,6 +569,287 @@
       return pages;
     }
 
+    // --- Visual Page Extractor Implementation ---
+    function setExtractGridColumns(cols) {
+      extractState.currentCols = cols;
+      const grid = document.getElementById('extract-grid');
+      grid.classList.remove('md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3');
+      grid.classList.add(`md:grid-cols-${cols}`);
+
+      [1, 2, 3].forEach(c => {
+        const btn = document.getElementById(`btn-ext-col-${c}`);
+        if (c === cols) {
+          btn.className = 'px-2.5 py-1 rounded bg-indigo-600 text-white font-medium flex items-center gap-1';
+        } else {
+          btn.className = 'px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1';
+        }
+      });
+
+      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]' };
+      document.querySelectorAll('.extract-preview-viewport').forEach(el => {
+        el.classList.remove('h-[750px]', 'h-[520px]', 'h-[360px]');
+        el.classList.add(heightMap[cols]);
+      });
+    }
+
+    async function loadExtractDocument(input) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      extractState.file = file;
+      extractState.pages = [];
+
+      document.getElementById('extract-file-lbl').textContent = file.name;
+      log(`Loading PDF for visual extraction: ${file.name}`);
+      document.getElementById('extract-controls').classList.remove('hidden');
+
+      const grid = document.getElementById('extract-grid');
+      grid.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-slate-400">Rendering preview pages...</div>';
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        extractState.pdfDoc = pdfDoc;
+
+        for (let i = 1; i <= pdfDoc.numPages; i++) {
+          const page = await pdfDoc.getPage(i);
+          const viewport = page.getViewport({ scale: 1.8 });
+          const c = document.createElement('canvas');
+          c.width = viewport.width;
+          c.height = viewport.height;
+          await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
+
+          extractState.pages.push({
+            origIndex: i - 1,
+            pageNum: i,
+            canvas: c,
+            selected: false
+          });
+        }
+
+        renderExtractGrid();
+        updateExtractCountBadge();
+        log(`Loaded ${extractState.pages.length} pages for visual extraction.`);
+      } catch (err) {
+        log(`Error loading file: ${err.message}`);
+        showStatus('Failed to load PDF for preview: ' + err.message, true);
+      }
+    }
+
+    function renderExtractGrid() {
+      const grid = document.getElementById('extract-grid');
+      grid.innerHTML = '';
+      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]' };
+      const currentHeightClass = heightMap[extractState.currentCols] || 'h-[360px]';
+
+      extractState.pages.forEach((p, idx) => {
+        const card = document.createElement('div');
+        card.id = `ext-card-${idx}`;
+        card.draggable = true;
+        card.className = `cursor-grab active:cursor-grabbing rounded-xl p-3 flex flex-col items-center gap-2 transition-all border-2 select-none relative ${
+          p.selected 
+            ? 'bg-emerald-950/30 border-emerald-500 shadow-md shadow-emerald-950' 
+            : 'bg-slate-900 border-slate-800 hover:border-slate-700'
+        }`;
+
+        // Drag & Drop handlers
+        card.ondragstart = (e) => {
+          extractState.draggedIdx = idx;
+          card.classList.add('dragging-card');
+          e.dataTransfer.effectAllowed = 'move';
+        };
+        card.ondragend = () => {
+          card.classList.remove('dragging-card');
+          document.querySelectorAll('#extract-grid .drag-over-card').forEach(el => el.classList.remove('drag-over-card'));
+        };
+        card.ondragover = (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          card.classList.add('drag-over-card');
+        };
+        card.ondragleave = () => {
+          card.classList.remove('drag-over-card');
+        };
+        card.ondrop = (e) => {
+          e.preventDefault();
+          card.classList.remove('drag-over-card');
+          if (extractState.draggedIdx !== null && extractState.draggedIdx !== idx) {
+            moveExtractPage(extractState.draggedIdx, idx);
+          }
+        };
+
+        // Header with Order # and Quick Move Buttons
+        const header = document.createElement('div');
+        header.className = 'w-full flex items-center justify-between text-xs text-slate-300';
+        header.innerHTML = `
+          <div class="flex items-center gap-1.5">
+            <span class="cursor-grab text-slate-500 hover:text-slate-300" title="Drag to reorder"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i></span>
+            <span class="font-bold text-white">#${idx + 1} <span class="text-[11px] font-normal text-slate-400">(Page ${p.pageNum})</span></span>
+          </div>
+          <div class="flex items-center gap-1">
+            <button onclick="event.stopPropagation(); moveExtractStep(${idx}, -1)" ${idx === 0 ? 'disabled class="opacity-30 p-1"' : 'class="p-1 hover:bg-slate-800 rounded text-slate-300"'} title="Move left">←</button>
+            <button onclick="event.stopPropagation(); moveExtractStep(${idx}, 1)" ${idx === extractState.pages.length - 1 ? 'disabled class="opacity-30 p-1"' : 'class="p-1 hover:bg-slate-800 rounded text-slate-300"'} title="Move right">→</button>
+          </div>
+        `;
+
+        const previewContainer = document.createElement('div');
+        previewContainer.className = `extract-preview-viewport w-full ${currentHeightClass} flex items-center justify-center overflow-hidden bg-black/60 rounded-lg p-2 border border-slate-800 relative cursor-pointer`;
+        previewContainer.onclick = () => toggleExtractPageSelection(idx);
+
+        const imgClone = document.createElement('canvas');
+        imgClone.width = p.canvas.width;
+        imgClone.height = p.canvas.height;
+        imgClone.className = 'max-w-full max-h-full object-contain shadow pointer-events-none';
+        imgClone.getContext('2d').drawImage(p.canvas, 0, 0);
+        previewContainer.appendChild(imgClone);
+
+        const footer = document.createElement('div');
+        footer.className = 'flex items-center justify-between w-full text-xs mt-1 px-1 cursor-pointer';
+        footer.onclick = () => toggleExtractPageSelection(idx);
+        footer.innerHTML = `
+          <span class="text-[11px] text-slate-400">Status:</span>
+          <span id="ext-status-${idx}" class="text-[11px] font-semibold ${p.selected ? 'text-emerald-400' : 'text-slate-500'}">
+            ${p.selected ? '✓ Selected' : 'Click to Pick'}
+          </span>
+        `;
+
+        card.appendChild(header);
+        card.appendChild(previewContainer);
+        card.appendChild(footer);
+        grid.appendChild(card);
+      });
+
+      lucide.createIcons();
+    }
+
+    function moveExtractPage(fromIdx, toIdx) {
+      const movedItem = extractState.pages.splice(fromIdx, 1)[0];
+      extractState.pages.splice(toIdx, 0, movedItem);
+      renderExtractGrid();
+      syncExtractRangeToInput();
+      log(`Reordered: moved Page ${movedItem.pageNum} to sequence position #${toIdx + 1}`);
+    }
+
+    function moveExtractStep(idx, step) {
+      const target = idx + step;
+      if (target >= 0 && target < extractState.pages.length) {
+        moveExtractPage(idx, target);
+      }
+    }
+
+    function toggleExtractPageSelection(idx) {
+      extractState.pages[idx].selected = !extractState.pages[idx].selected;
+      updateExtractCardUI(idx);
+      syncExtractRangeToInput();
+      updateExtractCountBadge();
+    }
+
+    function updateExtractCardUI(idx) {
+      const p = extractState.pages[idx];
+      const card = document.getElementById(`ext-card-${idx}`);
+      const status = document.getElementById(`ext-status-${idx}`);
+      if (!card || !status) return;
+
+      if (p.selected) {
+        card.className = 'cursor-grab active:cursor-grabbing rounded-xl p-3 flex flex-col items-center gap-2 transition-all border-2 bg-emerald-950/30 border-emerald-500 shadow-md shadow-emerald-950 select-none relative';
+        status.className = 'text-[11px] font-semibold text-emerald-400';
+        status.textContent = '✓ Selected';
+      } else {
+        card.className = 'cursor-grab active:cursor-grabbing rounded-xl p-3 flex flex-col items-center gap-2 transition-all border-2 bg-slate-900 border-slate-800 hover:border-slate-700 select-none relative';
+        status.className = 'text-[11px] font-semibold text-slate-500';
+        status.textContent = 'Click to Pick';
+      }
+    }
+
+    function extractSelectAll(isSelected) {
+      extractState.pages.forEach((p, idx) => {
+        p.selected = isSelected;
+        updateExtractCardUI(idx);
+      });
+      syncExtractRangeToInput();
+      updateExtractCountBadge();
+    }
+
+    function extractSelectOddEven(parity) {
+      extractState.pages.forEach((p, idx) => {
+        p.selected = parity === 'odd' ? ((idx + 1) % 2 !== 0) : ((idx + 1) % 2 === 0);
+        updateExtractCardUI(idx);
+      });
+      syncExtractRangeToInput();
+      updateExtractCountBadge();
+    }
+
+    function extractInvertSelection() {
+      extractState.pages.forEach((p, idx) => {
+        p.selected = !p.selected;
+        updateExtractCardUI(idx);
+      });
+      syncExtractRangeToInput();
+      updateExtractCountBadge();
+    }
+
+    function updateExtractCountBadge() {
+      const count = extractState.pages.filter(p => p.selected).length;
+      document.getElementById('extract-count-badge').textContent = `${count} page${count === 1 ? '' : 's'}`;
+    }
+
+    function syncExtractRangeToInput() {
+      const selected = extractState.pages
+        .map((p, idx) => p.selected ? idx + 1 : null)
+        .filter(n => n !== null);
+
+      if (selected.length === 0) {
+        document.getElementById('extract-range-input').value = '';
+        return;
+      }
+      
+      const ranges = [];
+      let start = selected[0], end = selected[0];
+
+      for (let i = 1; i < selected.length; i++) {
+        if (selected[i] === end + 1) {
+          end = selected[i];
+        } else {
+          ranges.push(start === end ? `${start}` : `${start}-${end}`);
+          start = end = selected[i];
+        }
+      }
+      ranges.push(start === end ? `${start}` : `${start}-${end}`);
+      document.getElementById('extract-range-input').value = ranges.join(', ');
+    }
+
+    function syncExtractRangeFromInput(val) {
+      const seqSet = parseRangeStr(val, extractState.pages.length);
+      extractState.pages.forEach((p, idx) => {
+        p.selected = seqSet.has(idx + 1);
+        updateExtractCardUI(idx);
+      });
+      updateExtractCountBadge();
+    }
+
+    async function applyExtractAndSave() {
+      if (!extractState.file) return showStatus('Please select a PDF file first.', true);
+      const selectedPages = extractState.pages.filter(p => p.selected);
+      if (selectedPages.length === 0) return showStatus('No pages selected to extract.', true);
+
+      log(`Exporting ${selectedPages.length} pages in arranged sequence...`);
+
+      const bytes = await extractState.file.arrayBuffer();
+      const srcPdf = await PDFLib.PDFDocument.load(bytes);
+      const newPdf = await PDFLib.PDFDocument.create();
+
+      // Copy pages in the exact reordered sequence
+      for (const p of selectedPages) {
+        const [copied] = await newPdf.copyPages(srcPdf, [p.origIndex]);
+        newPdf.addPage(copied);
+      }
+
+      const outBytes = await newPdf.save();
+      const originalName = extractState.file.name.replace(/\.[^/.]+$/, "");
+      downloadBlob(outBytes, `${originalName}_reordered.pdf`);
+      showStatus(`Extracted & rearranged ${selectedPages.length} pages successfully!`);
+    }
+
+    // --- Deskew Module Implementation (With Reordering Support) ---
     function setGridColumns(cols) {
       deskewState.currentCols = cols;
       const grid = document.getElementById('deskew-grid');
@@ -577,6 +953,7 @@
             c.height = viewport.height;
             await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
             deskewState.pages.push({
+              origIndex: i - 1,
               pageNum: i,
               originalCanvas: c,
               rotation: 0,
@@ -593,6 +970,7 @@
           c.height = img.height;
           c.getContext('2d').drawImage(img, 0, 0);
           deskewState.pages.push({
+            origIndex: 0,
             pageNum: 1,
             originalCanvas: c,
             rotation: 0,
@@ -617,10 +995,37 @@
 
       deskewState.pages.forEach((p, idx) => {
         const card = document.createElement('div');
-        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col items-center gap-2';
+        card.draggable = true;
+        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex flex-col items-center gap-2 cursor-grab active:cursor-grabbing select-none relative';
+
+        // Drag handlers
+        card.ondragstart = (e) => {
+          deskewState.draggedIdx = idx;
+          card.classList.add('dragging-card');
+          e.dataTransfer.effectAllowed = 'move';
+        };
+        card.ondragend = () => {
+          card.classList.remove('dragging-card');
+          document.querySelectorAll('#deskew-grid .drag-over-card').forEach(el => el.classList.remove('drag-over-card'));
+        };
+        card.ondragover = (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          card.classList.add('drag-over-card');
+        };
+        card.ondragleave = () => {
+          card.classList.remove('drag-over-card');
+        };
+        card.ondrop = (e) => {
+          e.preventDefault();
+          card.classList.remove('drag-over-card');
+          if (deskewState.draggedIdx !== null && deskewState.draggedIdx !== idx) {
+            moveDeskewPage(deskewState.draggedIdx, idx);
+          }
+        };
 
         const previewContainer = document.createElement('div');
-        previewContainer.className = `preview-viewport w-full ${currentHeightClass} flex items-center justify-center overflow-hidden bg-black/60 rounded-lg p-2 border border-slate-800 relative`;
+        previewContainer.className = `preview-viewport w-full ${currentHeightClass} flex items-center justify-center overflow-hidden bg-black/60 rounded-lg p-2 border border-slate-800 relative pointer-events-none`;
 
         const previewCanvas = document.createElement('canvas');
         previewCanvas.id = `deskew-canvas-${idx}`;
@@ -631,14 +1036,17 @@
         controls.className = 'flex items-center justify-between w-full text-xs text-slate-300 mt-1';
         controls.innerHTML = `
           <div class="flex items-center gap-1.5">
-            <span class="font-semibold text-slate-300">Page ${p.pageNum}</span>
+            <span class="cursor-grab text-slate-500 hover:text-slate-300" title="Drag to reorder"><i data-lucide="grip-vertical" class="w-3.5 h-3.5"></i></span>
+            <span class="font-bold text-white">#${idx + 1} <span class="text-[11px] font-normal text-slate-400">(P.${p.pageNum})</span></span>
+            <button onclick="moveDeskewStep(${idx}, -1)" ${idx === 0 ? 'disabled class="opacity-30 p-0.5"' : 'class="p-0.5 hover:bg-slate-800 rounded text-slate-300"'} title="Move left">←</button>
+            <button onclick="moveDeskewStep(${idx}, 1)" ${idx === deskewState.pages.length - 1 ? 'disabled class="opacity-30 p-0.5"' : 'class="p-0.5 hover:bg-slate-800 rounded text-slate-300"'} title="Move right">→</button>
+          </div>
+          <div class="flex items-center gap-1">
             <button onclick="autoDetectSinglePage(${idx})" title="Auto-detect tilt for this page only" class="px-1.5 py-0.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded text-[10px] font-medium flex items-center gap-1">
               <i data-lucide="zap" class="w-3 h-3"></i> Auto
             </button>
-          </div>
-          <div class="flex items-center gap-1.5">
-            <button onclick="rotateSinglePage(${idx}, -90)" title="Rotate -90°" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[11px] flex items-center gap-1"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> -90°</button>
-            <button onclick="rotateSinglePage(${idx}, 90)" title="Rotate +90°" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 rounded text-[11px] flex items-center gap-1"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i> +90°</button>
+            <button onclick="rotateSinglePage(${idx}, -90)" title="Rotate -90°" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[10px] flex items-center gap-1"><i data-lucide="rotate-ccw" class="w-3 h-3"></i></button>
+            <button onclick="rotateSinglePage(${idx}, 90)" title="Rotate +90°" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[10px] flex items-center gap-1"><i data-lucide="rotate-cw" class="w-3 h-3"></i></button>
           </div>
         `;
 
@@ -661,8 +1069,8 @@
           </select>
         `;
 
-        card.appendChild(previewContainer);
         card.appendChild(controls);
+        card.appendChild(previewContainer);
         card.appendChild(sliderRow);
         card.appendChild(modeRow);
         grid.appendChild(card);
@@ -671,6 +1079,20 @@
       });
 
       lucide.createIcons();
+    }
+
+    function moveDeskewPage(fromIdx, toIdx) {
+      const movedItem = deskewState.pages.splice(fromIdx, 1)[0];
+      deskewState.pages.splice(toIdx, 0, movedItem);
+      renderDeskewGrid();
+      log(`Reordered: Page ${movedItem.pageNum} moved to position #${toIdx + 1}`);
+    }
+
+    function moveDeskewStep(idx, step) {
+      const target = idx + step;
+      if (target >= 0 && target < deskewState.pages.length) {
+        moveDeskewPage(idx, target);
+      }
     }
 
     function drawPagePreview(idx) {
@@ -738,19 +1160,15 @@
       });
     }
 
-    // --- High Accuracy Border-Immune Deskew Engine ---
-    // Specifically ignores black flatbed scanner borders and table boundaries
     function computePageDeskew(sourceCanvas) {
       const fullW = sourceCanvas.width;
       const fullH = sourceCanvas.height;
 
-      // Safe Central Region: Ignore outer 12% border (eliminates scanner shadows & black frames)
       const cropX = Math.floor(fullW * 0.12);
       const cropY = Math.floor(fullH * 0.12);
       const cropW = Math.floor(fullW * 0.76);
       const cropH = Math.floor(fullH * 0.76);
 
-      // Downsample ROI to ~600px width for fast computation
       const targetW = 600;
       const scale = targetW / cropW;
       const targetH = Math.round(cropH * scale);
@@ -764,22 +1182,19 @@
       const imgData = ctx.getImageData(0, 0, targetW, targetH);
       const d = imgData.data;
 
-      // Extract horizontal edge gradients (Sobel Horizontal derivative |dy|)
-      // Vertical text baselines produce sharp spikes in dy across lines
       const edgeMap = new Uint8Array(targetW * targetH);
       for (let y = 1; y < targetH - 1; y++) {
         for (let x = 0; x < targetW; x++) {
           const top = 0.299 * d[((y - 1) * targetW + x) * 4] + 0.587 * d[((y - 1) * targetW + x) * 4 + 1] + 0.114 * d[((y - 1) * targetW + x) * 4 + 2];
           const btm = 0.299 * d[((y + 1) * targetW + x) * 4] + 0.587 * d[((y + 1) * targetW + x) * 4 + 1] + 0.114 * d[((y + 1) * targetW + x) * 4 + 2];
           const dy = Math.abs(btm - top);
-          edgeMap[y * targetW + x] = dy > 30 ? 1 : 0; // Filter subtle noise
+          edgeMap[y * targetW + x] = dy > 30 ? 1 : 0;
         }
       }
 
       let bestAngle = 0;
       let maxVariance = -1;
 
-      // Fine search from -7.0 to +7.0 in 0.2-degree steps
       for (let a = -7.0; a <= 7.0; a += 0.2) {
         const rad = (a * Math.PI) / 180;
         const cos = Math.cos(rad);
@@ -813,7 +1228,6 @@
       return parseFloat((-bestAngle).toFixed(1));
     }
 
-    // Auto-detect single page
     function autoDetectSinglePage(idx) {
       const page = deskewState.pages[idx];
       log(`Detecting tilt on Page ${page.pageNum}...`);
@@ -823,14 +1237,12 @@
       log(`Page ${page.pageNum} leveled: ${tilt}°`);
     }
 
-    // Global / Multi-page auto detect
     async function autoDetectAngle(allPagesIndividually = true) {
       if (deskewState.pages.length === 0) return;
       showStatus('Analyzing page tilt (ignoring scanner borders)...', false);
       log('Running border-isolated deskew analysis...');
 
       if (allPagesIndividually) {
-        // Evaluate each page on its own
         for (let i = 0; i < deskewState.pages.length; i++) {
           const tilt = computePageDeskew(deskewState.pages[i].originalCanvas);
           updateSinglePageAngle(i, tilt);
@@ -838,7 +1250,6 @@
         showStatus('All pages leveled individually based on text baselines!');
         log('All pages auto-leveled individually.');
       } else {
-        // Evaluate Page 1 and apply globally
         const tilt = computePageDeskew(deskewState.pages[0].originalCanvas);
         document.getElementById('deskew-angle-slider').value = tilt;
         updateAllDeskewAngle(tilt);
@@ -849,13 +1260,13 @@
 
     async function applyDeskewAndSave() {
       if (deskewState.pages.length === 0) return showStatus('No document loaded.', true);
-      log('Exporting deskewed document...');
+      log('Exporting deskewed document in customized sequence...');
 
       const newPdf = await PDFLib.PDFDocument.create();
 
       for (let i = 0; i < deskewState.pages.length; i++) {
         const p = deskewState.pages[i];
-        log(`Rendering output page ${i + 1}/${deskewState.pages.length} [Mode: ${p.fitMode}, Tilt: ${p.fineAngle}°]...`);
+        log(`Rendering output sequence #${i + 1} (Original Page ${p.pageNum}) [Mode: ${p.fitMode}, Tilt: ${p.fineAngle}°]...`);
 
         const src = p.originalCanvas;
         const { targetW, targetH, scale, totalAngleRad } = getRenderTransform(
@@ -891,8 +1302,8 @@
 
       const outBytes = await newPdf.save();
       const originalName = deskewState.file.name.replace(/\.[^/.]+$/, "");
-      downloadBlob(outBytes, `${originalName}_oriented.pdf`);
-      showStatus('Orientation & deskew correction exported successfully!');
+      downloadBlob(outBytes, `${originalName}_oriented_reordered.pdf`);
+      showStatus('Orientation & page sequence exported successfully!');
     }
 
     // --- Module 1: B/W Clean ---
