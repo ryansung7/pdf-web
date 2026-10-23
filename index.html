@@ -17,13 +17,9 @@
     .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
     .drag-active {
       opacity: 0.35;
-      transform: scale(0.97);
+      transform: scale(0.98);
       border-color: #6366f1 !important;
       border-style: dashed !important;
-    }
-    .drop-target {
-      outline: 2px solid #818cf8;
-      outline-offset: 2px;
     }
     .drag-handle-btn {
       cursor: grab;
@@ -36,9 +32,19 @@
       border: 2px dashed #475569;
       transition: all 0.2s ease;
     }
-    .file-drop-zone.active {
-      border-color: #6366f1;
-      background-color: rgba(99, 102, 241, 0.08);
+    .file-drop-zone.dragover {
+      border-color: #6366f1 !important;
+      background-color: rgba(99, 102, 241, 0.12) !important;
+      transform: scale(1.01);
+    }
+    /* Stable High-Visibility Insertion Highlights (No Layout Thrashing) */
+    .drop-line-top {
+      border-top: 3px solid #818cf8 !important;
+      box-shadow: 0 -4px 16px rgba(129, 140, 248, 0.45) !important;
+    }
+    .drop-line-bottom {
+      border-bottom: 3px solid #818cf8 !important;
+      box-shadow: 0 4px 16px rgba(129, 140, 248, 0.45) !important;
     }
   </style>
 </head>
@@ -76,12 +82,12 @@
       <p class="text-xs font-semibold text-slate-500 uppercase tracking-wider px-3 mb-2">Toolkit Modules</p>
       
       <!-- Studio Super Module -->
-      <button onclick="switchTab('combined')" id="tab-combined" class="tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-indigo-600 text-white">
+      <button onclick="switchTab('combined')" id="tab-combined" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
         <i data-lucide="sparkles" class="w-4 h-4"></i><span>★ All-in-One Studio</span>
       </button>
 
       <!-- Universal Assembler Module -->
-      <button onclick="switchTab('assembler')" id="tab-assembler" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+      <button onclick="switchTab('assembler')" id="tab-assembler" class="tab-btn active w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium bg-indigo-600 text-white">
         <i data-lucide="combine" class="w-4 h-4"></i><span>★ Universal File Assembler</span>
       </button>
 
@@ -108,26 +114,35 @@
         <div id="status-banner" class="hidden mb-4 p-3 rounded-xl text-xs font-medium flex items-center justify-between"></div>
 
         <!-- 1. ALL-IN-ONE STUDIO MODULE -->
-        <div id="panel-combined" class="panel space-y-5">
+        <div id="panel-combined" class="panel hidden space-y-5">
           <div class="flex items-center justify-between">
-            <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <i data-lucide="sparkles" class="text-indigo-400"></i> All-in-One Studio: Deskew, B/W Clean, Extract & Reorder
-            </h2>
-            <span class="text-xs text-slate-400">Straighten, clean contrast, pick pages, and drag to order in one go</span>
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i data-lucide="sparkles" class="text-indigo-400"></i> All-in-One Studio: Deskew, B/W Clean, Extract & Reorder
+              </h2>
+              <span class="text-xs text-slate-400">Straighten, clean contrast, pick pages, and drag to order in one go</span>
+            </div>
+            <button type="button" onclick="resetStudioModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
+            </button>
           </div>
 
-          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('combined-file').click()">
-            <i data-lucide="file-up" class="w-6 h-6 mx-auto mb-1 text-indigo-400"></i>
-            <p id="combined-file-lbl" class="text-xs font-medium text-slate-300">Select PDF or Scanned Document</p>
-            <p class="text-[11px] text-slate-500 mt-1">Accepts PDF, JPG, PNG</p>
+          <div id="combined-drop-box" 
+               class="file-drop-zone rounded-xl p-8 text-center bg-slate-900/50 cursor-pointer" 
+               onclick="document.getElementById('combined-file').click()"
+               ondragover="handleBoxDragOver(event)"
+               ondragleave="handleBoxDragLeave(event)"
+               ondrop="handleCombinedBoxDrop(event)">
+            <i data-lucide="file-up" class="w-8 h-8 mx-auto mb-2 text-indigo-400 pointer-events-none"></i>
+            <p id="combined-file-lbl" class="text-sm font-semibold text-slate-200 pointer-events-none">Drag & Drop PDF or Scanned Document Here</p>
+            <p class="text-xs text-slate-400 mt-1 pointer-events-none">or click to browse from your device</p>
+            <p class="text-[11px] text-slate-500 mt-1 pointer-events-none">Accepts PDF, JPG, PNG</p>
             <input type="file" id="combined-file" accept="application/pdf,image/*" class="hidden" onchange="loadCombinedDocument(this)">
           </div>
 
           <div id="combined-controls" class="hidden space-y-4">
-            <!-- Global Toolbars -->
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl space-y-3 text-xs">
               
-              <!-- Row 1: Page Selection & Extraction Tools -->
               <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-800 pb-3">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-bold text-emerald-400 flex items-center gap-1"><i data-lucide="check-square" class="w-3.5 h-3.5"></i> Select Pages:</span>
@@ -143,7 +158,6 @@
                 </div>
               </div>
 
-              <!-- Row 2: Deskew & B/W Clean Controls -->
               <div class="flex flex-wrap items-center justify-between gap-3">
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="font-bold text-indigo-400">Deskew:</span>
@@ -173,7 +187,6 @@
 
             </div>
 
-            <!-- Sequence Sync & Layout View Switcher -->
             <div class="flex flex-col sm:flex-row items-center justify-between gap-3 pt-1">
               <div class="w-full sm:flex-1 flex items-center gap-2 text-xs">
                 <span class="text-slate-400 whitespace-nowrap">Selected Sequence:</span>
@@ -188,7 +201,6 @@
               </div>
             </div>
 
-            <!-- Main Interactive Gallery -->
             <div>
               <p class="text-xs text-slate-400 mb-2"><b>Drag handle (⋮⋮)</b> to change order. Click card to toggle inclusion. Sliders adjust tilt without triggering drags:</p>
               <div id="combined-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-[650px] overflow-y-auto custom-scroll p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl"></div>
@@ -200,55 +212,83 @@
           </div>
         </div>
 
-        <!-- 2. COMBINED UNIVERSAL ASSEMBLER (PDF Merger + Images + Insert Pages) -->
-        <div id="panel-assembler" class="panel hidden space-y-5">
+        <!-- 2. UNIVERSAL ASSEMBLER MODULE -->
+        <div id="panel-assembler" class="panel space-y-5">
           <div class="flex items-center justify-between">
-            <h2 class="text-lg font-bold text-white flex items-center gap-2">
-              <i data-lucide="combine" class="text-indigo-400"></i> Universal File Assembler & Merger
-            </h2>
-            <span class="text-xs text-slate-400">Combine multiple PDFs & images, view thumbnails, re-order, insert in-between, and pass directly to Studio</span>
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i data-lucide="combine" class="text-indigo-400"></i> Universal File Assembler & Merger[cite: 13]
+              </h2>
+              <span class="text-xs text-slate-400">Combine multiple PDFs & images, view thumbnails, re-order, insert in-between, and pass directly to Studio[cite: 13]</span>
+            </div>
+            <button type="button" onclick="resetAssemblerModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over[cite: 13]
+            </button>
           </div>
 
-          <!-- Upload / Drop zone -->
+          <!-- Drag and Drop Boxes for Files and Folders -->
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div class="file-drop-zone rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('assembler-files').click()">
-              <i data-lucide="files" class="w-6 h-6 mx-auto mb-1 text-indigo-400"></i>
-              <p class="text-xs font-medium text-slate-300">Add PDF and/or Image Files</p>
-              <p class="text-[11px] text-slate-500 mt-1">Select multiple items or drag here</p>
+            <div id="assembler-drop-files"
+                 class="file-drop-zone rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" 
+                 onclick="document.getElementById('assembler-files').click()"
+                 ondragover="handleBoxDragOver(event)"
+                 ondragleave="handleBoxDragLeave(event)"
+                 ondrop="handleAssemblerBoxDrop(event, null)">
+              <i data-lucide="files" class="w-7 h-7 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
+              <p class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop PDF and/or Image Files Here[cite: 13]</p>
+              <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">or click to browse multiple files[cite: 13]</p>
               <input type="file" id="assembler-files" multiple accept="application/pdf,image/*" class="hidden" onchange="handleAssemblerAddFiles(this.files)">
             </div>
-            <div class="file-drop-zone rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('assembler-folder').click()">
-              <i data-lucide="folder-plus" class="w-6 h-6 mx-auto mb-1 text-indigo-400"></i>
-              <p class="text-xs font-medium text-slate-300">Add Entire Folder</p>
-              <p class="text-[11px] text-slate-500 mt-1">Loads all PDFs & images inside</p>
+
+            <div id="assembler-drop-folder"
+                 class="file-drop-zone rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" 
+                 onclick="document.getElementById('assembler-folder').click()"
+                 ondragover="handleBoxDragOver(event)"
+                 ondragleave="handleBoxDragLeave(event)"
+                 ondrop="handleAssemblerBoxDrop(event, null)">
+              <i data-lucide="folder-plus" class="w-7 h-7 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
+              <p class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop Folder Here[cite: 13]</p>
+              <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">Loads all PDFs & images inside[cite: 13]</p>
               <input type="file" id="assembler-folder" webkitdirectory directory class="hidden" onchange="handleAssemblerAddFiles(this.files)">
             </div>
           </div>
 
-          <!-- Hidden input for inserting files in-between -->
+          <!-- Hidden input for manual button inserts -->
           <input type="file" id="assembler-insert-input" multiple accept="application/pdf,image/*" class="hidden" onchange="handleAssemblerInsertFiles(this.files)">
 
           <!-- Assembler Work Area -->
           <div id="assembler-work-area" class="hidden space-y-4">
             
-            <!-- Reorder / Sequence Toolbar -->
             <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
               <div class="flex items-center gap-2 flex-wrap">
                 <span class="font-bold text-indigo-400 flex items-center gap-1"><i data-lucide="arrow-down-up" class="w-3.5 h-3.5"></i> Order By:</span>
                 <button type="button" onclick="sortAssemblerList('natural')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Natural / Name (0-9, A-Z)</button>
                 <button type="button" onclick="sortAssemblerList('time')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Scan Timestamp</button>
                 <button type="button" onclick="reverseAssemblerList()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Reverse</button>
-                <button type="button" onclick="clearAssemblerList()" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-rose-300 rounded-lg">Clear All</button>
+                <button type="button" onclick="clearAssemblerList()" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-rose-300 rounded-lg">Clear All Files</button>
               </div>
-              <div class="text-slate-400">
-                Total Files: <span id="assembler-file-count" class="font-bold text-white">0</span>
+              <div class="text-slate-400 flex items-center gap-2">
+                <span>Drag files directly onto the top/bottom of any card to insert in-between:</span>
+                <span class="text-slate-500">•</span>
+                <span>Total Files: <span id="assembler-file-count" class="font-bold text-white">0</span></span>
               </div>
             </div>
 
-            <!-- File List Items with Live Thumbnail Previews & In-Between Insert Zones -->
-            <div id="assembler-item-list" class="space-y-2 max-h-[520px] overflow-y-auto custom-scroll p-1"></div>
+            <!-- List with Live Thumbnails & Zero-Flicker Card Insertion Target -->
+            <div id="assembler-item-list" class="space-y-3 max-h-[540px] overflow-y-auto custom-scroll p-1"></div>
 
-            <!-- Action Buttons: Direct Download OR Pass to Studio -->
+            <!-- Bottom Drop Area (Append to End of Queue) -->
+            <div id="assembler-queue-tail"
+                 class="file-drop-zone rounded-xl p-4 text-center bg-slate-900/30 cursor-pointer hover:bg-slate-900/60"
+                 onclick="document.getElementById('assembler-files').click()"
+                 ondragover="handleBoxDragOver(event)"
+                 ondragleave="handleBoxDragLeave(event)"
+                 ondrop="handleAssemblerBoxDrop(event, null)">
+              <p class="text-xs font-medium text-slate-400 pointer-events-none flex items-center justify-center gap-1.5">
+                <i data-lucide="plus-circle" class="w-4 h-4 text-indigo-400"></i> Drop files here to append to the end of the file list
+              </p>
+            </div>
+
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
               <button onclick="processAssemblerMerge(false)" class="py-2.5 bg-slate-800 hover:bg-slate-700 border border-slate-700 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white">
                 <i data-lucide="download" class="w-4 h-4"></i> Merge & Download Combined PDF
@@ -264,10 +304,19 @@
         <div id="panel-split" class="panel hidden space-y-5">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="scissors" class="text-indigo-400"></i> 2. Page Splitter</h2>
+            <button type="button" onclick="resetSplitModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
+            </button>
           </div>
 
-          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('split-file').click()">
-            <p id="split-file-lbl" class="text-xs font-medium text-slate-300">Select PDF File</p>
+          <div id="split-drop-box"
+               class="file-drop-zone rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" 
+               onclick="document.getElementById('split-file').click()"
+               ondragover="handleBoxDragOver(event)"
+               ondragleave="handleBoxDragLeave(event)"
+               ondrop="handleSinglePdfDrop(event, 'split')">
+            <i data-lucide="file-up" class="w-6 h-6 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
+            <p id="split-file-lbl" class="text-xs font-medium text-slate-300 pointer-events-none">Drag & Drop PDF File Here, or click to browse</p>
             <input type="file" id="split-file" accept="application/pdf" class="hidden" onchange="loadSplitDocument(this)">
           </div>
 
@@ -290,10 +339,19 @@
         <div id="panel-rotate" class="panel hidden space-y-5">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="rotate-cw" class="text-indigo-400"></i> 3. Batch Rotator</h2>
+            <button type="button" onclick="resetRotateModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
+            </button>
           </div>
 
-          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('rot-files').click()">
-            <p id="rot-files-lbl" class="text-xs font-medium text-slate-300">Select PDF File(s)</p>
+          <div id="rot-drop-box"
+               class="file-drop-zone rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" 
+               onclick="document.getElementById('rot-files').click()"
+               ondragover="handleBoxDragOver(event)"
+               ondragleave="handleBoxDragLeave(event)"
+               ondrop="handleSinglePdfDrop(event, 'rotate')">
+            <i data-lucide="file-up" class="w-6 h-6 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
+            <p id="rot-files-lbl" class="text-xs font-medium text-slate-300 pointer-events-none">Drag & Drop PDF File Here, or click to browse</p>
             <input type="file" id="rot-files" accept="application/pdf" class="hidden" onchange="loadRotateDocument(this)">
           </div>
 
@@ -332,10 +390,19 @@
         <div id="panel-delete" class="panel hidden space-y-5">
           <div class="flex items-center justify-between">
             <h2 class="text-lg font-bold text-white flex items-center gap-2"><i data-lucide="trash-2" class="text-indigo-400"></i> 4. Delete Pages</h2>
+            <button type="button" onclick="resetDeleteModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
+            </button>
           </div>
 
-          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500 rounded-xl p-5 text-center bg-slate-900/50 cursor-pointer" onclick="document.getElementById('del-file').click()">
-            <p id="del-file-lbl" class="text-xs font-medium text-slate-300">Select PDF File</p>
+          <div id="del-drop-box"
+               class="file-drop-zone rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer" 
+               onclick="document.getElementById('del-file').click()"
+               ondragover="handleBoxDragOver(event)"
+               ondragleave="handleBoxDragLeave(event)"
+               ondrop="handleSinglePdfDrop(event, 'delete')">
+            <i data-lucide="file-up" class="w-6 h-6 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
+            <p id="del-file-lbl" class="text-xs font-medium text-slate-300 pointer-events-none">Drag & Drop PDF File Here, or click to browse</p>
             <input type="file" id="del-file" accept="application/pdf" class="hidden" onchange="loadDeleteDocument(this)">
           </div>
 
@@ -379,6 +446,10 @@
   </main>
 
   <script>
+    // Universal dragover preventer to avoid browser navigating away
+    window.addEventListener("dragover", (e) => e.preventDefault(), false);
+    window.addEventListener("drop", (e) => e.preventDefault(), false);
+
     document.addEventListener("DOMContentLoaded", () => {
       lucide.createIcons();
     });
@@ -387,25 +458,296 @@
 
     const activeFileStore = {};
 
-    // Combined Super State
+    // 1. Studio State
     const combinedState = {
       file: null,
-      pages: [], // { origIndex, pageNum, originalCanvas, rotation: 0, fineAngle: 0, fitMode: 'same', bwMode: 'standard', gamma: 0.20, selected: true }
+      pages: [],
       currentCols: 3,
       draggedIdx: null
     };
 
-    // Universal Assembler State with Thumbnail Cache
+    // 2. Assembler State
     const assemblerState = {
-      files: [], // Array of File objects in ordered sequence
+      files: [],
       draggedIdx: null,
       pendingInsertIndex: null,
-      thumbnailCache: new Map() // File -> { dataUrl, pageCount, isPdf }
+      thumbnailCache: new Map()
     };
 
+    // 3. Other Modules States
     const splitState = { file: null, pages: [] };
     const rotState = { file: null, pages: [] };
     const delState = { file: null, pages: [] };
+
+    // ==========================================
+    // MODULE RESET & START OVER HANDLERS
+    // ==========================================
+    function resetStudioModule() {
+      combinedState.file = null;
+      combinedState.pages = [];
+      combinedState.draggedIdx = null;
+
+      const fileInput = document.getElementById('combined-file');
+      if (fileInput) fileInput.value = '';
+
+      const lbl = document.getElementById('combined-file-lbl');
+      if (lbl) lbl.textContent = 'Drag & Drop PDF or Scanned Document Here';
+
+      const controls = document.getElementById('combined-controls');
+      if (controls) controls.classList.add('hidden');
+
+      const grid = document.getElementById('combined-grid');
+      if (grid) grid.innerHTML = '';
+
+      const badge = document.getElementById('comb-selected-count');
+      if (badge) badge.textContent = '0 selected';
+
+      const rangeInput = document.getElementById('comb-range-input');
+      if (rangeInput) rangeInput.value = '';
+
+      showStatus('All-in-One Studio has been reset.');
+      log('All-in-One Studio cleared and reset.');
+      lucide.createIcons();
+    }
+
+    function resetAssemblerModule() {
+      assemblerState.files = [];
+      assemblerState.draggedIdx = null;
+      assemblerState.pendingInsertIndex = null;
+      assemblerState.thumbnailCache.clear();
+
+      const fileInput = document.getElementById('assembler-files');
+      if (fileInput) fileInput.value = '';
+
+      const folderInput = document.getElementById('assembler-folder');
+      if (folderInput) folderInput.value = '';
+
+      const insertInput = document.getElementById('assembler-insert-input');
+      if (insertInput) insertInput.value = '';
+
+      const workArea = document.getElementById('assembler-work-area');
+      if (workArea) workArea.classList.add('hidden');
+
+      const itemList = document.getElementById('assembler-item-list');
+      if (itemList) itemList.innerHTML = '';
+
+      const counter = document.getElementById('assembler-file-count');
+      if (counter) counter.textContent = '0';
+
+      showStatus('Universal File Assembler has been reset.');
+      log('Universal File Assembler cleared and reset.');
+      lucide.createIcons();
+    }
+
+    function resetSplitModule() {
+      splitState.file = null;
+      splitState.pages = [];
+
+      const fileInput = document.getElementById('split-file');
+      if (fileInput) fileInput.value = '';
+
+      const lbl = document.getElementById('split-file-lbl');
+      if (lbl) lbl.textContent = 'Drag & Drop PDF File Here, or click to browse';
+
+      const controls = document.getElementById('split-controls');
+      if (controls) controls.classList.add('hidden');
+
+      const grid = document.getElementById('split-grid');
+      if (grid) grid.innerHTML = '';
+
+      const rangeInput = document.getElementById('split-range');
+      if (rangeInput) rangeInput.value = '';
+
+      showStatus('Page Splitter module reset.');
+    }
+
+    function resetRotateModule() {
+      rotState.file = null;
+      rotState.pages = [];
+
+      const fileInput = document.getElementById('rot-files');
+      if (fileInput) fileInput.value = '';
+
+      const lbl = document.getElementById('rot-files-lbl');
+      if (lbl) lbl.textContent = 'Drag & Drop PDF File Here, or click to browse';
+
+      const controls = document.getElementById('rot-controls');
+      if (controls) controls.classList.add('hidden');
+
+      const grid = document.getElementById('rot-grid');
+      if (grid) grid.innerHTML = '';
+
+      const rangeInput = document.getElementById('rot-range');
+      if (rangeInput) rangeInput.value = '';
+
+      showStatus('Batch Rotator module reset.');
+    }
+
+    function resetDeleteModule() {
+      delState.file = null;
+      delState.pages = [];
+
+      const fileInput = document.getElementById('del-file');
+      if (fileInput) fileInput.value = '';
+
+      const lbl = document.getElementById('del-file-lbl');
+      if (lbl) lbl.textContent = 'Drag & Drop PDF File Here, or click to browse';
+
+      const controls = document.getElementById('del-controls');
+      if (controls) controls.classList.add('hidden');
+
+      const grid = document.getElementById('del-grid');
+      if (grid) grid.innerHTML = '';
+
+      const rangeInput = document.getElementById('del-range');
+      if (rangeInput) rangeInput.value = '';
+
+      showStatus('Delete Pages module reset.');
+    }
+
+    // ==========================================
+    // INSTANT & RELIABLE FILE EXTRACTION
+    // ==========================================
+    function isSupportedPdfOrImage(f) {
+      if (!f) return false;
+      const name = (f.name || '').toLowerCase();
+      const type = (f.type || '').toLowerCase();
+      return name.endsWith('.pdf') || 
+             type === 'application/pdf' || 
+             /\.(jpg|jpeg|png|webp|bmp|gif|tif|tiff)$/i.test(name) || 
+             type.startsWith('image/');
+    }
+
+    // Extracts dropped files with 100% reliability from operating system File Explorers
+    async function extractDroppedFiles(dataTransfer) {
+      if (!dataTransfer) return [];
+
+      // Step 1: Read direct files immediately (sync snapshot)
+      let directFiles = [];
+      if (dataTransfer.files && dataTransfer.files.length > 0) {
+        directFiles = Array.from(dataTransfer.files).filter(isSupportedPdfOrImage);
+      }
+
+      // Step 2: Check if any folders are present
+      const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
+      const hasDirectory = items.some(item => {
+        if (item.webkitGetAsEntry) {
+          const entry = item.webkitGetAsEntry();
+          return entry && entry.isDirectory;
+        }
+        return false;
+      });
+
+      // If user dropped regular desktop files (not directories), return direct files immediately
+      if (!hasDirectory && directFiles.length > 0) {
+        return directFiles;
+      }
+
+      // If directories exist, traverse asynchronously
+      const folderFiles = [];
+      async function traverse(entry) {
+        if (!entry) return;
+        if (entry.isFile) {
+          try {
+            const f = await new Promise((res, rej) => entry.file(res, rej));
+            if (f && isSupportedPdfOrImage(f)) {
+              folderFiles.push(f);
+            }
+          } catch (e) {
+            console.warn(e);
+          }
+        } else if (entry.isDirectory) {
+          try {
+            const dirReader = entry.createReader();
+            const readBatch = () => new Promise(res => dirReader.readEntries(res, () => res([])));
+            let entries;
+            do {
+              entries = await readBatch();
+              for (const child of entries) {
+                await traverse(child);
+              }
+            } while (entries.length > 0);
+          } catch (e) {
+            console.warn(e);
+          }
+        }
+      }
+
+      for (const item of items) {
+        if (item.webkitGetAsEntry) {
+          const entry = item.webkitGetAsEntry();
+          if (entry) await traverse(entry);
+        }
+      }
+
+      if (folderFiles.length > 0) return folderFiles;
+      return directFiles;
+    }
+
+    function handleBoxDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.add('dragover');
+    }
+
+    function handleBoxDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.remove('dragover');
+    }
+
+    async function handleCombinedBoxDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.remove('dragover');
+
+      const files = await extractDroppedFiles(e.dataTransfer);
+      if (files.length === 0) {
+        return showStatus('Please drop a valid PDF or image file (PDF, JPG, PNG).', true);
+      }
+      loadDocumentDirectlyIntoStudio(files[0]);
+    }
+
+    async function handleAssemblerBoxDrop(e, targetInsertIndex = null) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.remove('dragover');
+
+      const extractedFiles = await extractDroppedFiles(e.dataTransfer);
+      if (extractedFiles.length === 0) {
+        return showStatus('No valid PDF or image files found in drop.', true);
+      }
+
+      if (targetInsertIndex !== null && typeof targetInsertIndex === 'number') {
+        assemblerState.files.splice(targetInsertIndex, 0, ...extractedFiles);
+        renderAssemblerList();
+        showStatus(`Inserted ${extractedFiles.length} file(s) at position #${targetInsertIndex + 1}!`);
+        log(`Inserted ${extractedFiles.length} file(s) at position #${targetInsertIndex + 1}.`);
+      } else {
+        handleAssemblerAddFiles(extractedFiles);
+      }
+    }
+
+    async function handleSinglePdfDrop(e, targetModule) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.remove('dragover');
+
+      const files = await extractDroppedFiles(e.dataTransfer);
+      const pdfFiles = files.filter(f => f.name.toLowerCase().endsWith('.pdf') || f.type === 'application/pdf');
+      if (pdfFiles.length === 0) {
+        return showStatus('Please drop a valid PDF file.', true);
+      }
+      const file = pdfFiles[0];
+
+      if (targetModule === 'split') {
+        loadSplitDocument({ files: [file] });
+      } else if (targetModule === 'rotate') {
+        loadRotateDocument({ files: [file] });
+      } else if (targetModule === 'delete') {
+        loadDeleteDocument({ files: [file] });
+      }
+    }
 
     function switchTab(tabId) {
       document.querySelectorAll('.panel').forEach(p => p.classList.add('hidden'));
@@ -493,7 +835,7 @@
     }
 
     // =========================================================================
-    // UNIVERSAL FILE ASSEMBLER WITH THUMBNAIL PREVIEWS
+    // UNIVERSAL FILE ASSEMBLER WITH THUMBNAILS & STABLE ZERO-FLICKER DROP SLOTS
     // =========================================================================
     async function getAssemblerThumbnail(file) {
       if (assemblerState.thumbnailCache.has(file)) {
@@ -527,13 +869,10 @@
 
     function handleAssemblerAddFiles(fileList) {
       if (!fileList || fileList.length === 0) return;
-      const validFiles = Array.from(fileList).filter(f => {
-        const name = f.name.toLowerCase();
-        return name.endsWith('.pdf') || /\.(jpg|jpeg|png|webp|bmp)$/i.test(name);
-      });
+      const validFiles = Array.from(fileList).filter(isSupportedPdfOrImage);
 
       if (validFiles.length === 0) {
-        return showStatus('No valid PDF or image files selected.', true);
+        return showStatus('No valid PDF or image files detected.', true);
       }
 
       assemblerState.files.push(...validFiles);
@@ -549,10 +888,7 @@
 
     function handleAssemblerInsertFiles(fileList) {
       if (!fileList || fileList.length === 0) return;
-      const validFiles = Array.from(fileList).filter(f => {
-        const name = f.name.toLowerCase();
-        return name.endsWith('.pdf') || /\.(jpg|jpeg|png|webp|bmp)$/i.test(name);
-      });
+      const validFiles = Array.from(fileList).filter(isSupportedPdfOrImage);
 
       const insertIdx = assemblerState.pendingInsertIndex ?? assemblerState.files.length;
       assemblerState.files.splice(insertIdx, 0, ...validFiles);
@@ -561,6 +897,14 @@
       renderAssemblerList();
       log(`Inserted ${validFiles.length} file(s) at position #${insertIdx + 1}.`);
       showStatus(`Inserted ${validFiles.length} file(s) successfully!`);
+    }
+
+    function clearCardDropHighlights(card) {
+      card.classList.remove('drop-line-top', 'drop-line-bottom');
+      const badgeTop = card.querySelector('.badge-drop-top');
+      const badgeBottom = card.querySelector('.badge-drop-bottom');
+      if (badgeTop) badgeTop.classList.add('hidden');
+      if (badgeBottom) badgeBottom.classList.add('hidden');
     }
 
     function renderAssemblerList() {
@@ -575,44 +919,30 @@
       }
 
       assemblerState.files.forEach((f, idx) => {
-        // In-between insert divider button
-        const insertDivider = document.createElement('div');
-        insertDivider.className = 'group relative py-1 flex items-center justify-center';
-        insertDivider.innerHTML = `
-          <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-800 group-hover:border-indigo-500/60 transition"></div></div>
-          <button type="button" onclick="triggerInsertAt(${idx})" class="relative opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white rounded-full flex items-center gap-1 transition shadow-md">
-            <i data-lucide="plus-circle" class="w-3 h-3"></i> Insert file here
-          </button>
-        `;
-        container.appendChild(insertDivider);
-
-        // File Item Card with Thumbnail Box
         const isPdf = f.name.toLowerCase().endsWith('.pdf');
         const card = document.createElement('div');
-        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 select-none hover:border-slate-700 transition';
+        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 select-none hover:border-slate-700 transition relative';
         card.id = `asm-card-${idx}`;
         card.draggable = false;
-
-        card.ondragover = (e) => { e.preventDefault(); card.classList.add('drop-target'); };
-        card.ondragleave = () => { card.classList.remove('drop-target'); };
-        card.ondrop = (e) => {
-          e.preventDefault();
-          card.classList.remove('drop-target');
-          if (assemblerState.draggedIdx !== null && assemblerState.draggedIdx !== idx) {
-            moveAssemblerFile(assemblerState.draggedIdx, idx);
-          }
-        };
 
         const sizeKb = (f.size / 1024).toFixed(1);
 
         card.innerHTML = `
+          <!-- Stable insertion guidance indicators (no layout shifting) -->
+          <div class="badge-drop-top hidden absolute -top-3.5 left-1/2 -translate-x-1/2 bg-indigo-600 text-white font-bold text-[10px] px-3 py-0.5 rounded-full shadow-lg z-30 pointer-events-none flex items-center gap-1 border border-indigo-400">
+            <i data-lucide="plus" class="w-3 h-3"></i> Insert Before (#${idx + 1})
+          </div>
+          <div class="badge-drop-bottom hidden absolute -bottom-3.5 left-1/2 -translate-x-1/2 bg-indigo-600 text-white font-bold text-[10px] px-3 py-0.5 rounded-full shadow-lg z-30 pointer-events-none flex items-center gap-1 border border-indigo-400">
+            <i data-lucide="plus" class="w-3 h-3"></i> Insert After (#${idx + 2})
+          </div>
+
           <div class="flex items-center gap-3 min-w-0">
             <span class="drag-handle-btn p-1 text-slate-400 hover:text-white rounded bg-slate-800/80 hover:bg-slate-700" title="Drag to reorder" draggable="true">
               <i data-lucide="grip-vertical" class="w-4 h-4 pointer-events-none"></i>
             </span>
             <span class="font-mono text-xs font-bold text-indigo-400 w-6">#${idx + 1}</span>
 
-            <!-- Live Image / First Page Thumbnail Preview -->
+            <!-- First Page / Image Thumbnail Preview -->
             <div class="w-14 h-16 sm:w-16 sm:h-20 bg-slate-950 rounded-lg border border-slate-700/80 flex items-center justify-center overflow-hidden flex-shrink-0 shadow relative">
               <div id="asm-thumb-loading-${idx}" class="text-[9px] text-slate-500 text-center animate-pulse">Loading...</div>
               <img id="asm-thumb-img-${idx}" class="w-full h-full object-contain hidden pointer-events-none" alt="preview" />
@@ -632,10 +962,77 @@
           <div class="flex items-center gap-1.5 flex-shrink-0">
             <button type="button" onclick="moveAssemblerStep(${idx}, -1)" ${idx === 0 ? 'disabled class="opacity-25 p-1 text-slate-400"' : 'class="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded"'} title="Move Up">↑</button>
             <button type="button" onclick="moveAssemblerStep(${idx}, 1)" ${idx === assemblerState.files.length - 1 ? 'disabled class="opacity-25 p-1 text-slate-400"' : 'class="p-1 text-slate-400 hover:text-white hover:bg-slate-800 rounded"'} title="Move Down">↓</button>
+            <button type="button" onclick="triggerInsertAt(${idx + 1})" class="p-1 text-indigo-400 hover:text-white hover:bg-indigo-600/30 rounded" title="Insert file after this"><i data-lucide="plus" class="w-3.5 h-3.5"></i></button>
             <button type="button" onclick="removeAssemblerFile(${idx})" class="p-1 text-slate-500 hover:text-rose-400 hover:bg-slate-800 rounded ml-1" title="Remove"><i data-lucide="x" class="w-3.5 h-3.5"></i></button>
           </div>
         `;
 
+        // 100% Reliable dragover / dragleave / drop handling (zero layout shifts)
+        card.ondragover = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          e.dataTransfer.dropEffect = 'copy';
+
+          const rect = card.getBoundingClientRect();
+          const isTopHalf = (e.clientY - rect.top) < (rect.height / 2);
+
+          const badgeTop = card.querySelector('.badge-drop-top');
+          const badgeBottom = card.querySelector('.badge-drop-bottom');
+
+          if (isTopHalf) {
+            card.classList.add('drop-line-top');
+            card.classList.remove('drop-line-bottom');
+            if (badgeTop) badgeTop.classList.remove('hidden');
+            if (badgeBottom) badgeBottom.classList.add('hidden');
+          } else {
+            card.classList.add('drop-line-bottom');
+            card.classList.remove('drop-line-top');
+            if (badgeBottom) badgeBottom.classList.remove('hidden');
+            if (badgeTop) badgeTop.classList.add('hidden');
+          }
+        };
+
+        card.ondragleave = (e) => {
+          // Ignore event if mouse is still within this card
+          if (e.relatedTarget && card.contains(e.relatedTarget)) {
+            return;
+          }
+          clearCardDropHighlights(card);
+        };
+
+        card.ondrop = async (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const rect = card.getBoundingClientRect();
+          const isTopHalf = (e.clientY - rect.top) < (rect.height / 2);
+          const targetIndex = isTopHalf ? idx : idx + 1;
+          clearCardDropHighlights(card);
+
+          // Handle internal card reordering
+          if (assemblerState.draggedIdx !== null) {
+            const fromIdx = assemblerState.draggedIdx;
+            let toIdx = targetIndex;
+            if (fromIdx < toIdx) toIdx--;
+            if (fromIdx !== toIdx) {
+              moveAssemblerFile(fromIdx, toIdx);
+            }
+            assemblerState.draggedIdx = null;
+            return;
+          }
+
+          // Handle external desktop file(s) drop
+          if (e.dataTransfer) {
+            const extractedFiles = await extractDroppedFiles(e.dataTransfer);
+            if (extractedFiles.length > 0) {
+              assemblerState.files.splice(targetIndex, 0, ...extractedFiles);
+              renderAssemblerList();
+              showStatus(`Inserted ${extractedFiles.length} file(s) at position #${targetIndex + 1}!`);
+              log(`Inserted ${extractedFiles.length} file(s) at position #${targetIndex + 1}.`);
+            }
+          }
+        };
+
+        // Bind internal card drag exclusively to the grip handle
         const handle = card.querySelector('.drag-handle-btn');
         handle.ondragstart = (e) => {
           assemblerState.draggedIdx = idx;
@@ -644,12 +1041,12 @@
         };
         handle.ondragend = () => {
           card.classList.remove('drag-active');
-          document.querySelectorAll('#assembler-item-list .drop-target').forEach(el => el.classList.remove('drop-target'));
+          document.querySelectorAll('#assembler-item-list > div').forEach(clearCardDropHighlights);
         };
 
         container.appendChild(card);
 
-        // Asynchronously render preview image without blocking UI
+        // Async render first-page thumbnail
         getAssemblerThumbnail(f).then(thumb => {
           const loadingEl = document.getElementById(`asm-thumb-loading-${idx}`);
           const imgEl = document.getElementById(`asm-thumb-img-${idx}`);
@@ -664,17 +1061,6 @@
           }
         });
       });
-
-      // Bottom insert button
-      const bottomInsert = document.createElement('div');
-      bottomInsert.className = 'group relative py-1 flex items-center justify-center';
-      bottomInsert.innerHTML = `
-        <div class="absolute inset-0 flex items-center"><div class="w-full border-t border-slate-800 group-hover:border-indigo-500/60 transition"></div></div>
-        <button type="button" onclick="triggerInsertAt(${assemblerState.files.length})" class="relative opacity-0 group-hover:opacity-100 px-2 py-0.5 bg-indigo-600 hover:bg-indigo-500 text-[10px] text-white rounded-full flex items-center gap-1 transition shadow-md">
-          <i data-lucide="plus-circle" class="w-3 h-3"></i> Insert file at bottom
-        </button>
-      `;
-      container.appendChild(bottomInsert);
 
       lucide.createIcons();
     }
@@ -766,41 +1152,68 @@
       }
     }
 
-    // Direct Studio loader from File or In-Memory Blob
+    // Direct Studio loader
     async function loadDocumentDirectlyIntoStudio(file) {
       combinedState.file = file;
       combinedState.pages = [];
 
-      document.getElementById('combined-file-lbl').textContent = file.name;
+      const lbl = document.getElementById('combined-file-lbl');
+      if (lbl) lbl.textContent = file.name;
       document.getElementById('combined-controls').classList.remove('hidden');
 
       const grid = document.getElementById('combined-grid');
       grid.innerHTML = '<div class="col-span-full py-8 text-center text-xs text-slate-400">Rendering high-res pages...</div>';
 
-      const arrayBuffer = await file.arrayBuffer();
-      const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-      for (let i = 1; i <= pdfDoc.numPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 2.0 });
-        const c = document.createElement('canvas');
-        c.width = viewport.width; c.height = viewport.height;
-        await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
-        combinedState.pages.push({
-          origIndex: i - 1,
-          pageNum: i,
-          originalCanvas: c,
-          rotation: 0,
-          fineAngle: 0,
-          fitMode: 'same',
-          bwMode: 'standard',
-          gamma: 0.20,
-          selected: true
-        });
-      }
+      try {
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale: 2.0 });
+            const c = document.createElement('canvas');
+            c.width = viewport.width; c.height = viewport.height;
+            await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
+            combinedState.pages.push({
+              origIndex: i - 1,
+              pageNum: i,
+              originalCanvas: c,
+              rotation: 0,
+              fineAngle: 0,
+              fitMode: 'same',
+              bwMode: 'standard',
+              gamma: 0.20,
+              selected: true
+            });
+          }
+        } else {
+          const img = new Image();
+          img.src = URL.createObjectURL(file);
+          await new Promise(res => img.onload = res);
+          const c = document.createElement('canvas');
+          c.width = img.width; c.height = img.height;
+          c.getContext('2d').drawImage(img, 0, 0);
+          combinedState.pages.push({
+            origIndex: 0,
+            pageNum: 1,
+            originalCanvas: c,
+            rotation: 0,
+            fineAngle: 0,
+            fitMode: 'same',
+            bwMode: 'standard',
+            gamma: 0.20,
+            selected: true
+          });
+        }
 
-      renderCombinedGrid();
-      syncCombinedRangeToInput();
-      updateCombinedSelectedCount();
+        renderCombinedGrid();
+        syncCombinedRangeToInput();
+        updateCombinedSelectedCount();
+        log(`Loaded ${combinedState.pages.length} pages into Studio.`);
+      } catch (err) {
+        log(`Error loading file: ${err.message}`);
+        showStatus('Failed to load file: ' + err.message, true);
+      }
     }
 
     // =========================================================================
