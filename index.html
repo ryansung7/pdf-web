@@ -13,19 +13,24 @@
   <!-- PDF.js for rendering pages to canvas -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
   <style>
-    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
     .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 4px; }
     .drag-active {
-      opacity: 0.35;
+      opacity: 0.4;
       transform: scale(0.98);
       border-color: #6366f1 !important;
       border-style: dashed !important;
     }
     .drag-handle-btn {
       cursor: grab;
-      touch-action: none;
     }
     .drag-handle-btn:active {
+      cursor: grabbing;
+    }
+    .draggable-card {
+      cursor: grab;
+    }
+    .draggable-card:active {
       cursor: grabbing;
     }
     .file-drop-zone {
@@ -37,7 +42,7 @@
       background-color: rgba(99, 102, 241, 0.12) !important;
       transform: scale(1.01);
     }
-    /* Stable High-Visibility Insertion Highlights (No Layout Thrashing) */
+    /* High-Visibility Insertion Highlights */
     .drop-line-top {
       border-top: 3px solid #818cf8 !important;
       box-shadow: 0 -4px 16px rgba(129, 140, 248, 0.45) !important;
@@ -46,12 +51,61 @@
       border-bottom: 3px solid #818cf8 !important;
       box-shadow: 0 4px 16px rgba(129, 140, 248, 0.45) !important;
     }
+    .drop-line-left {
+      border-left: 4px solid #818cf8 !important;
+      box-shadow: -6px 0 18px rgba(129, 140, 248, 0.5) !important;
+    }
+    .drop-line-right {
+      border-right: 4px solid #818cf8 !important;
+      box-shadow: 6px 0 18px rgba(129, 140, 248, 0.5) !important;
+    }
+    /* Interactive Crop Box Overlay Styling */
+    .crop-stage {
+      position: relative;
+      display: inline-block;
+      user-select: none;
+      touch-action: none;
+      line-height: 0;
+    }
+    .crop-box-overlay {
+      position: absolute;
+      border: 2px solid #6366f1;
+      box-shadow: 0 0 0 9999px rgba(2, 6, 23, 0.68);
+      cursor: move;
+      z-index: 20;
+    }
+    .crop-grid-lines {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(to right, rgba(255,255,255,0.22) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255,255,255,0.22) 1px, transparent 1px);
+      background-size: 33.333% 33.333%;
+    }
+    .crop-handle {
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      background-color: #6366f1;
+      border: 2px solid #ffffff;
+      border-radius: 3px;
+      z-index: 30;
+    }
+    .crop-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
+    .crop-handle.ne { top: -6px; right: -6px; cursor: nesw-resize; }
+    .crop-handle.sw { bottom: -6px; left: -6px; cursor: nesw-resize; }
+    .crop-handle.se { bottom: -6px; right: -6px; cursor: nwse-resize; }
+    .crop-handle.n  { top: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+    .crop-handle.s  { bottom: -6px; left: 50%; transform: translateX(-50%); cursor: ns-resize; }
+    .crop-handle.w  { top: 50%; left: -6px; transform: translateY(-50%); cursor: ew-resize; }
+    .crop-handle.e  { top: 50%; right: -6px; transform: translateY(-50%); cursor: ew-resize; }
   </style>
 </head>
 <body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col font-sans antialiased">
 
   <!-- Header -->
-  <header class="border-b border-slate-800 bg-slate-950 sticky top-0 z-50 backdrop-blur-md">
+  <header class="border-b border-slate-800 bg-slate-950 sticky top-0 z-40 backdrop-blur-md">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
       <div class="flex items-center space-x-3">
         <div class="p-2 bg-indigo-600 rounded-lg text-white">
@@ -102,10 +156,14 @@
       <button onclick="switchTab('delete')" id="tab-delete" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
         <i data-lucide="trash-2" class="w-4 h-4"></i><span>4. Delete Pages</span>
       </button>
+
+      <button onclick="switchTab('crop')" id="tab-crop" class="tab-btn w-full flex items-center space-x-3 px-3 py-2.5 rounded-xl text-xs font-medium text-slate-400 hover:bg-slate-800 hover:text-white">
+        <i data-lucide="crop" class="w-4 h-4"></i><span>5. Crop Pages (Live)</span>
+      </button>
     </aside>
 
     <!-- Workspace & Console Container -->
-    <section class="flex-1 flex flex-col gap-4">
+    <section class="flex-1 flex flex-col gap-4 min-w-0">
       
       <!-- Module Workspace -->
       <div class="bg-slate-950/50 border border-slate-800 rounded-2xl p-6 flex-1">
@@ -115,12 +173,12 @@
 
         <!-- 1. ALL-IN-ONE STUDIO MODULE -->
         <div id="panel-combined" class="panel hidden space-y-5">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                <i data-lucide="sparkles" class="text-indigo-400"></i> All-in-One Studio: Deskew, B/W Clean, Extract & Reorder
+                <i data-lucide="sparkles" class="text-indigo-400"></i> All-in-One Studio: Deskew, B/W Clean, Crop, Extract & Reorder
               </h2>
-              <span class="text-xs text-slate-400">Straighten, clean contrast, pick pages, and drag to order in one go</span>
+              <span class="text-xs text-slate-400">Straighten, clean contrast, crop with live preview, drag cards to reorder, and unify page size</span>
             </div>
             <button type="button" onclick="resetStudioModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
               <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
@@ -153,6 +211,12 @@
                   <button type="button" onclick="invertExtractionSelection()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Invert</button>
                 </div>
                 <div class="flex items-center gap-2">
+                  <button type="button" onclick="openStudioCropModal(0)" class="px-2.5 py-1 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/30 rounded-lg font-medium flex items-center gap-1 transition">
+                    <i data-lucide="crop" class="w-3.5 h-3.5"></i> Interactive Crop Tool
+                  </button>
+                  <button type="button" onclick="resetAllStudioCrops()" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 rounded-lg text-[11px]">
+                    Reset Crops
+                  </button>
                   <span class="text-slate-400">Export Queue:</span>
                   <span id="comb-selected-count" class="font-mono text-xs px-2.5 py-1 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 font-bold">0 selected</span>
                 </div>
@@ -193,36 +257,55 @@
                 <input type="text" id="comb-range-input" placeholder="e.g. 1-3, 5, 8" onchange="syncCombinedRangeFromInput(this.value)" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-xs text-white">
               </div>
 
-              <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs flex-shrink-0">
-                <span class="text-[11px] text-slate-500 px-1 font-medium">Layout:</span>
-                <button type="button" onclick="setCombinedGridColumns(1)" id="btn-comb-col-1" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium">1 Col (Huge)</button>
-                <button type="button" onclick="setCombinedGridColumns(2)" id="btn-comb-col-2" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium">2 Col (Large)</button>
-                <button type="button" onclick="setCombinedGridColumns(3)" id="btn-comb-col-3" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-medium">3 Col (Default)</button>
+              <div class="flex items-center gap-2 flex-wrap">
+                <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs">
+                  <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+                  <span class="text-slate-300 font-medium">Output Page Size:</span>
+                  <select id="comb-output-size" class="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-white font-semibold">
+                    <option value="A4" selected>A4 (Default • 210×297mm)</option>
+                    <option value="original">Original Size</option>
+                    <option value="cropped">Cropped Size (Exact)</option>
+                    <option value="A3">A3 (297×420mm)</option>
+                    <option value="A5">A5 (148×210mm)</option>
+                  </select>
+                </div>
+
+                <div class="flex items-center gap-1.5 bg-slate-900 border border-slate-800 rounded-lg p-1 text-xs flex-shrink-0">
+                  <span class="text-[11px] text-slate-500 px-1 font-medium">Layout:</span>
+                  <button type="button" onclick="setCombinedGridColumns(1)" id="btn-comb-col-1" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium">1 Col</button>
+                  <button type="button" onclick="setCombinedGridColumns(2)" id="btn-comb-col-2" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium">2 Col</button>
+                  <button type="button" onclick="setCombinedGridColumns(3)" id="btn-comb-col-3" class="px-2.5 py-1 rounded bg-indigo-600 text-white font-medium">3 Col</button>
+                  <button type="button" onclick="setCombinedGridColumns(6)" id="btn-comb-col-6" class="px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1" title="Compact view for fast drag-and-drop reordering">
+                    <i data-lucide="layout-grid" class="w-3 h-3"></i> 6 Col (Fast Drag)
+                  </button>
+                </div>
               </div>
             </div>
 
             <div>
-              <p class="text-xs text-slate-400 mb-2"><b>Drag handle (⋮⋮)</b> to change order. Click card to toggle inclusion. Sliders adjust tilt without triggering drags:</p>
-              <div id="combined-grid" class="grid grid-cols-1 md:grid-cols-3 gap-4 max-h-[650px] overflow-y-auto custom-scroll p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl"></div>
+              <p class="text-xs text-slate-400 mb-2"><b>Drag any card or handle (⋮⋮)</b> to reorder pages (tip: switch to <b>6 Col</b> to see more pages at once). Click preview to toggle inclusion, or click <b>Crop</b> for live interactive cropping:</p>
+              <div id="combined-grid"
+                   ondragover="handleStudioGridAutoScroll(event)"
+                   class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 max-h-[650px] overflow-y-auto custom-scroll p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl"></div>
             </div>
 
             <button onclick="applyCombinedAndSave()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white shadow-lg shadow-emerald-950">
-              <i data-lucide="download" class="w-4 h-4"></i> Export Processed PDF (Extracted & Leveled in Custom Order)
+              <i data-lucide="download" class="w-4 h-4"></i> Export Processed PDF (Custom Order, Cropped & Unified Size)
             </button>
           </div>
         </div>
 
         <!-- 2. UNIVERSAL ASSEMBLER MODULE -->
         <div id="panel-assembler" class="panel space-y-5">
-          <div class="flex items-center justify-between">
+          <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <h2 class="text-lg font-bold text-white flex items-center gap-2">
-                <i data-lucide="combine" class="text-indigo-400"></i> Universal File Assembler & Merger[cite: 13]
+                <i data-lucide="combine" class="text-indigo-400"></i> Universal File Assembler & Merger
               </h2>
-              <span class="text-xs text-slate-400">Combine multiple PDFs & images, view thumbnails, re-order, insert in-between, and pass directly to Studio[cite: 13]</span>
+              <span class="text-xs text-slate-400">Combine multiple PDFs & images, drag cards to reorder, unify output page size (A4 default), or pass to Studio</span>
             </div>
             <button type="button" onclick="resetAssemblerModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
-              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over[cite: 13]
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
             </button>
           </div>
 
@@ -235,8 +318,8 @@
                  ondragleave="handleBoxDragLeave(event)"
                  ondrop="handleAssemblerBoxDrop(event, null)">
               <i data-lucide="files" class="w-7 h-7 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
-              <p class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop PDF and/or Image Files Here[cite: 13]</p>
-              <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">or click to browse multiple files[cite: 13]</p>
+              <p class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop PDF and/or Image Files Here</p>
+              <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">or click to browse multiple files</p>
               <input type="file" id="assembler-files" multiple accept="application/pdf,image/*" class="hidden" onchange="handleAssemblerAddFiles(this.files)">
             </div>
 
@@ -247,8 +330,8 @@
                  ondragleave="handleBoxDragLeave(event)"
                  ondrop="handleAssemblerBoxDrop(event, null)">
               <i data-lucide="folder-plus" class="w-7 h-7 mx-auto mb-1 text-indigo-400 pointer-events-none"></i>
-              <p class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop Folder Here[cite: 13]</p>
-              <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">Loads all PDFs & images inside[cite: 13]</p>
+              <p class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop Folder Here</p>
+              <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">Loads all PDFs & images inside</p>
               <input type="file" id="assembler-folder" webkitdirectory directory class="hidden" onchange="handleAssemblerAddFiles(this.files)">
             </div>
           </div>
@@ -267,12 +350,25 @@
                 <button type="button" onclick="reverseAssemblerList()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Reverse</button>
                 <button type="button" onclick="clearAssemblerList()" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-rose-300 rounded-lg">Clear All Files</button>
               </div>
-              <div class="text-slate-400 flex items-center gap-2">
-                <span>Drag files directly onto the top/bottom of any card to insert in-between:</span>
-                <span class="text-slate-500">•</span>
-                <span>Total Files: <span id="assembler-file-count" class="font-bold text-white">0</span></span>
+
+              <div class="flex items-center gap-3 flex-wrap">
+                <div class="flex items-center gap-1.5 bg-slate-950 border border-slate-700/80 rounded-lg px-2.5 py-1">
+                  <i data-lucide="maximize-2" class="w-3.5 h-3.5 text-indigo-400"></i>
+                  <span class="text-slate-300 font-medium">Unify Output Page Size:</span>
+                  <select id="assembler-output-size" class="bg-slate-900 border border-slate-700 rounded px-2 py-0.5 text-white font-semibold">
+                    <option value="A4" selected>A4 (Default • 210×297mm)</option>
+                    <option value="original">Original Size</option>
+                    <option value="A3">A3 (297×420mm)</option>
+                    <option value="A5">A5 (148×210mm)</option>
+                  </select>
+                </div>
+                <div class="text-slate-400">
+                  Total Files: <span id="assembler-file-count" class="font-bold text-white">0</span>
+                </div>
               </div>
             </div>
+
+            <p class="text-xs text-slate-400"><b>Drag any file card</b> up or down to reorder sequence, or drag new files from your computer between cards:</p>
 
             <!-- List with Live Thumbnails & Zero-Flicker Card Insertion Target -->
             <div id="assembler-item-list" class="space-y-3 max-h-[540px] overflow-y-auto custom-scroll p-1"></div>
@@ -418,6 +514,143 @@
           </div>
         </div>
 
+        <!-- 6. CROP PAGES (WITH INTERACTIVE LIVE PREVIEW) -->
+        <div id="panel-crop" class="panel hidden space-y-5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <i data-lucide="crop" class="text-indigo-400"></i> 5. Crop Pages (Interactive Live Preview)
+              </h2>
+              <span class="text-xs text-slate-400">Drag crop handles on the page, inspect the live cropped output preview, and export to A4, A3, A5, Cropped, or Original size</span>
+            </div>
+            <button type="button" onclick="resetCropModule()" class="px-2.5 py-1.5 bg-slate-800 hover:bg-rose-950/40 text-slate-400 hover:text-rose-300 border border-slate-700 hover:border-rose-800/40 rounded-lg text-xs font-medium flex items-center gap-1.5 transition">
+              <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> Clear & Start Over
+            </button>
+          </div>
+
+          <div id="crop-drop-box"
+               class="file-drop-zone rounded-xl p-6 text-center bg-slate-900/50 cursor-pointer"
+               onclick="document.getElementById('crop-file').click()"
+               ondragover="handleBoxDragOver(event)"
+               ondragleave="handleBoxDragLeave(event)"
+               ondrop="handleCropBoxDrop(event)">
+            <i data-lucide="crop" class="w-7 h-7 mx-auto mb-1.5 text-indigo-400 pointer-events-none"></i>
+            <p id="crop-file-lbl" class="text-xs font-semibold text-slate-200 pointer-events-none">Drag & Drop PDF or Image File Here to Crop</p>
+            <p class="text-[11px] text-slate-400 mt-0.5 pointer-events-none">or click to browse from your device</p>
+            <input type="file" id="crop-file" accept="application/pdf,image/*" class="hidden" onchange="loadCropDocument(this)">
+          </div>
+
+          <div id="crop-controls" class="hidden space-y-4">
+            <!-- Top Toolbar -->
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div class="flex items-center gap-2">
+                <button type="button" onclick="changeCropPage(-1)" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-white flex items-center gap-1">
+                  <i data-lucide="chevron-left" class="w-3.5 h-3.5"></i> Prev
+                </button>
+                <span id="crop-page-indicator" class="font-mono font-bold text-indigo-400 px-2">Page 1 / 1</span>
+                <button type="button" onclick="changeCropPage(1)" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-white flex items-center gap-1">
+                  Next <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
+                </button>
+              </div>
+
+              <div class="flex items-center gap-2 flex-wrap">
+                <span class="text-slate-400 font-medium">Ratio Preset:</span>
+                <button type="button" onclick="setCropAspectPreset('free')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">Free</button>
+                <button type="button" onclick="setCropAspectPreset('a4p')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">ISO A4/A3/A5 (Portrait)</button>
+                <button type="button" onclick="setCropAspectPreset('a4l')" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 rounded-lg text-slate-200">ISO (Landscape)</button>
+                <button type="button" onclick="resetCurrentPageCrop()" class="px-2.5 py-1 bg-rose-950/40 hover:bg-rose-900/50 border border-rose-800/40 text-rose-300 rounded-lg">Reset Box</button>
+              </div>
+
+              <div class="flex items-center gap-2 flex-wrap">
+                <button type="button" onclick="applyCurrentCropToAllPages()" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600 text-indigo-300 hover:text-white border border-indigo-500/40 rounded-lg font-medium flex items-center gap-1.5 transition">
+                  <i data-lucide="copy-check" class="w-3.5 h-3.5"></i> Apply This Crop Box to All Pages
+                </button>
+              </div>
+            </div>
+
+            <!-- Margin Inputs & Output Size Bar -->
+            <div class="bg-slate-900 border border-slate-800 p-4 rounded-xl grid grid-cols-2 sm:grid-cols-6 gap-3 items-end text-xs">
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Left (%)</label>
+                <input type="number" id="crop-in-x" min="0" max="90" step="0.5" value="0" oninput="updateCropFromNumericInputs()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-white font-mono">
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Top (%)</label>
+                <input type="number" id="crop-in-y" min="0" max="90" step="0.5" value="0" oninput="updateCropFromNumericInputs()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-white font-mono">
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Width (%)</label>
+                <input type="number" id="crop-in-w" min="5" max="100" step="0.5" value="100" oninput="updateCropFromNumericInputs()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-white font-mono">
+              </div>
+              <div>
+                <label class="block text-[11px] text-slate-400 mb-1">Height (%)</label>
+                <input type="number" id="crop-in-h" min="5" max="100" step="0.5" value="100" oninput="updateCropFromNumericInputs()" class="w-full bg-slate-950 border border-slate-700 rounded-lg p-1.5 text-white font-mono">
+              </div>
+              <div class="col-span-2">
+                <label class="block text-[11px] text-indigo-400 font-semibold mb-1">Output Page Size (Default: A4)</label>
+                <select id="crop-output-size" onchange="renderCropLiveOutput()" class="w-full bg-slate-950 border border-indigo-500/50 rounded-lg p-1.5 text-white font-semibold">
+                  <option value="A4" selected>A4 (Default • 210×297 mm)</option>
+                  <option value="cropped">Cropped Size (Exact Crop Area)</option>
+                  <option value="original">Original Page Size</option>
+                  <option value="A3">A3 (297×420 mm)</option>
+                  <option value="A5">A5 (148×210 mm)</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- Interactive Editor & Live Resulting Page Preview Side-by-Side -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              <!-- Left: Interactive Crop Stage -->
+              <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-4 flex flex-col items-center">
+                <div class="w-full flex items-center justify-between text-xs text-slate-400 mb-3">
+                  <span class="font-semibold text-white flex items-center gap-1.5"><i data-lucide="move" class="w-3.5 h-3.5 text-indigo-400"></i> 1. Drag Handles to Crop</span>
+                  <span id="crop-dim-info" class="font-mono text-[11px] text-slate-400">100% × 100%</span>
+                </div>
+                <div class="flex-1 flex items-center justify-center w-full min-h-[380px] max-h-[520px] overflow-auto p-2 bg-black/50 rounded-lg border border-slate-900">
+                  <div id="crop-interactive-stage" class="crop-stage">
+                    <canvas id="crop-source-canvas" class="max-w-full max-h-[460px] block select-none pointer-events-none"></canvas>
+                    <div id="crop-overlay-box" class="crop-box-overlay">
+                      <div class="crop-grid-lines"></div>
+                      <div class="crop-handle nw" data-handle="nw"></div>
+                      <div class="crop-handle n" data-handle="n"></div>
+                      <div class="crop-handle ne" data-handle="ne"></div>
+                      <div class="crop-handle e" data-handle="e"></div>
+                      <div class="crop-handle se" data-handle="se"></div>
+                      <div class="crop-handle s" data-handle="s"></div>
+                      <div class="crop-handle sw" data-handle="sw"></div>
+                      <div class="crop-handle w" data-handle="w"></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Right: Live Cropped Output Preview -->
+              <div class="bg-slate-950/90 border border-slate-800 rounded-xl p-4 flex flex-col items-center">
+                <div class="w-full flex items-center justify-between text-xs text-slate-400 mb-3">
+                  <span class="font-semibold text-emerald-400 flex items-center gap-1.5"><i data-lucide="eye" class="w-3.5 h-3.5"></i> 2. Live Output Preview</span>
+                  <span id="crop-live-target-badge" class="font-mono text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Output: A4</span>
+                </div>
+                <div class="flex-1 flex items-center justify-center w-full min-h-[380px] max-h-[520px] overflow-auto p-3 bg-black/50 rounded-lg border border-slate-900">
+                  <canvas id="crop-live-preview-canvas" class="max-w-full max-h-[460px] object-contain shadow-xl border border-slate-700 bg-white"></canvas>
+                </div>
+              </div>
+            </div>
+
+            <!-- Page Thumbnails Strip -->
+            <div id="crop-thumbs-strip" class="flex items-center gap-2 overflow-x-auto custom-scroll p-2 bg-slate-900/70 border border-slate-800 rounded-xl"></div>
+
+            <!-- Export Actions -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button onclick="exportCroppedPdf(false)" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white shadow-lg shadow-emerald-950">
+                <i data-lucide="download" class="w-4 h-4"></i> Export Cropped PDF Now
+              </button>
+              <button onclick="exportCroppedPdf(true)" class="py-2.5 bg-indigo-600 hover:bg-indigo-500 font-medium rounded-xl text-xs flex justify-center items-center gap-2 text-white">
+                <i data-lucide="sparkles" class="w-4 h-4"></i> Pass Cropped Document to All-in-One Studio →
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- Generated Files Output History Manager -->
@@ -445,6 +678,77 @@
     </section>
   </main>
 
+  <!-- STUDIO INTERACTIVE CROP MODAL (For All-in-One Studio Per-Page / Batch Cropping) -->
+  <div id="studio-crop-modal" class="fixed inset-0 z-50 hidden bg-slate-950/85 backdrop-blur-sm flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 rounded-2xl max-w-5xl w-full p-5 space-y-4 shadow-2xl max-h-[94vh] flex flex-col">
+      <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div class="flex items-center gap-2">
+          <i data-lucide="crop" class="w-5 h-5 text-indigo-400"></i>
+          <h3 class="text-sm font-bold text-white">Studio Live Crop Editor — <span id="studio-crop-title" class="text-indigo-400">Page #1</span></h3>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="stepStudioCropModal(-1)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200">← Prev Page</button>
+          <button type="button" onclick="stepStudioCropModal(1)" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 rounded text-xs text-slate-200">Next Page →</button>
+          <button type="button" onclick="closeStudioCropModal()" class="p-1 text-slate-400 hover:text-white rounded-lg bg-slate-800"><i data-lucide="x" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 flex-1 overflow-y-auto custom-scroll pr-1">
+        <!-- Interactive Stage -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center">
+          <div class="w-full flex items-center justify-between text-xs text-slate-400 mb-2">
+            <span class="font-semibold text-white">Drag Handles to Adjust Crop Area</span>
+            <span id="studio-crop-dims" class="font-mono text-[11px]">100% × 100%</span>
+          </div>
+          <div class="flex-1 flex items-center justify-center w-full min-h-[320px] bg-black/50 rounded-lg p-2 overflow-auto">
+            <div id="studio-crop-stage" class="crop-stage">
+              <canvas id="studio-crop-source-canvas" class="max-w-full max-h-[380px] block select-none pointer-events-none"></canvas>
+              <div id="studio-crop-box" class="crop-box-overlay">
+                <div class="crop-grid-lines"></div>
+                <div class="crop-handle nw" data-handle="nw"></div>
+                <div class="crop-handle n" data-handle="n"></div>
+                <div class="crop-handle ne" data-handle="ne"></div>
+                <div class="crop-handle e" data-handle="e"></div>
+                <div class="crop-handle se" data-handle="se"></div>
+                <div class="crop-handle s" data-handle="s"></div>
+                <div class="crop-handle sw" data-handle="sw"></div>
+                <div class="crop-handle w" data-handle="w"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Preview -->
+        <div class="bg-slate-950 border border-slate-800 rounded-xl p-3 flex flex-col items-center">
+          <div class="w-full flex items-center justify-between text-xs text-slate-400 mb-2">
+            <span class="font-semibold text-emerald-400">Live Cropped Result Preview</span>
+            <span id="studio-crop-size-lbl" class="font-mono text-[11px] text-indigo-400">Output Size</span>
+          </div>
+          <div class="flex-1 flex items-center justify-center w-full min-h-[320px] bg-black/50 rounded-lg p-2 overflow-auto">
+            <canvas id="studio-crop-live-canvas" class="max-w-full max-h-[380px] object-contain bg-white shadow-lg border border-slate-700"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-800 text-xs">
+        <div class="flex items-center gap-2 flex-wrap">
+          <button type="button" onclick="setStudioModalPreset('free')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">Full Page (Reset)</button>
+          <button type="button" onclick="setStudioModalPreset('margin5')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">Trim 5% Margins</button>
+          <button type="button" onclick="setStudioModalPreset('margin10')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">Trim 10% Margins</button>
+          <button type="button" onclick="setStudioModalPreset('a4')" class="px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 rounded-lg text-slate-200">A4 Ratio</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button type="button" onclick="applyStudioModalCropToAll()" class="px-3 py-1.5 bg-indigo-600/30 hover:bg-indigo-600 text-indigo-200 hover:text-white border border-indigo-500/40 rounded-lg font-medium">
+            Apply This Crop to All Studio Pages
+          </button>
+          <button type="button" onclick="closeStudioCropModal()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-semibold rounded-lg shadow">
+            Done & Update Preview
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
     // Universal dragover preventer to avoid browser navigating away
     window.addEventListener("dragover", (e) => e.preventDefault(), false);
@@ -452,18 +756,49 @@
 
     document.addEventListener("DOMContentLoaded", () => {
       lucide.createIcons();
+      initCropInteractiveDrag('crop-interactive-stage', 'crop-overlay-box', 'module');
+      initCropInteractiveDrag('studio-crop-stage', 'studio-crop-box', 'studio');
     });
 
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-    const activeFileStore = {};
+    // Standard PDF Page Sizes in Points (72 DPI)
+    const PAGE_SIZE_SPECS = {
+      A4: { width: 595.28, height: 841.89, label: 'A4 (210×297mm)' },
+      A3: { width: 841.89, height: 1190.55, label: 'A3 (297×420mm)' },
+      A5: { width: 419.53, height: 595.28, label: 'A5 (148×210mm)' }
+    };
+
+    // Helper to resolve target PDF page dimensions [width, height] given source width/height & selected size mode
+    function resolveOutputPageDimensions(srcW, srcH, sizeMode) {
+      if (!sizeMode || sizeMode === 'original' || sizeMode === 'cropped') {
+        return { pageW: srcW, pageH: srcH, fitScale: 1, drawW: srcW, drawH: srcH, offsetX: 0, offsetY: 0 };
+      }
+      const spec = PAGE_SIZE_SPECS[sizeMode] || PAGE_SIZE_SPECS.A4;
+      const isLandscape = srcW > srcH;
+      const pageW = isLandscape ? spec.height : spec.width;
+      const pageH = isLandscape ? spec.width : spec.height;
+      const fitScale = Math.min(pageW / srcW, pageH / srcH);
+      const drawW = srcW * fitScale;
+      const drawH = srcH * fitScale;
+      const offsetX = (pageW - drawW) / 2;
+      const offsetY = (pageH - drawH) / 2;
+      return { pageW, pageH, fitScale, drawW, drawH, offsetX, offsetY };
+    }
+
+    // Helper to check if an event target is an interactive input/button where card drag should not start
+    function isInteractiveControl(el) {
+      if (!el || !el.closest) return false;
+      return Boolean(el.closest('input, select, button, textarea, a, label'));
+    }
 
     // 1. Studio State
     const combinedState = {
       file: null,
       pages: [],
       currentCols: 3,
-      draggedIdx: null
+      draggedIdx: null,
+      activeCropPageIdx: 0
     };
 
     // 2. Assembler State
@@ -478,6 +813,13 @@
     const splitState = { file: null, pages: [] };
     const rotState = { file: null, pages: [] };
     const delState = { file: null, pages: [] };
+
+    // 4. Dedicated Crop Module State
+    const cropState = {
+      file: null,
+      pages: [], // { pageNum, canvas, crop: { x, y, w, h } } (normalized 0..1)
+      currentIdx: 0
+    };
 
     // ==========================================
     // MODULE RESET & START OVER HANDLERS
@@ -542,67 +884,64 @@
     function resetSplitModule() {
       splitState.file = null;
       splitState.pages = [];
-
       const fileInput = document.getElementById('split-file');
       if (fileInput) fileInput.value = '';
-
       const lbl = document.getElementById('split-file-lbl');
       if (lbl) lbl.textContent = 'Drag & Drop PDF File Here, or click to browse';
-
       const controls = document.getElementById('split-controls');
       if (controls) controls.classList.add('hidden');
-
       const grid = document.getElementById('split-grid');
       if (grid) grid.innerHTML = '';
-
       const rangeInput = document.getElementById('split-range');
       if (rangeInput) rangeInput.value = '';
-
       showStatus('Page Splitter module reset.');
     }
 
     function resetRotateModule() {
       rotState.file = null;
       rotState.pages = [];
-
       const fileInput = document.getElementById('rot-files');
       if (fileInput) fileInput.value = '';
-
       const lbl = document.getElementById('rot-files-lbl');
       if (lbl) lbl.textContent = 'Drag & Drop PDF File Here, or click to browse';
-
       const controls = document.getElementById('rot-controls');
       if (controls) controls.classList.add('hidden');
-
       const grid = document.getElementById('rot-grid');
       if (grid) grid.innerHTML = '';
-
       const rangeInput = document.getElementById('rot-range');
       if (rangeInput) rangeInput.value = '';
-
       showStatus('Batch Rotator module reset.');
     }
 
     function resetDeleteModule() {
       delState.file = null;
       delState.pages = [];
-
       const fileInput = document.getElementById('del-file');
       if (fileInput) fileInput.value = '';
-
       const lbl = document.getElementById('del-file-lbl');
       if (lbl) lbl.textContent = 'Drag & Drop PDF File Here, or click to browse';
-
       const controls = document.getElementById('del-controls');
       if (controls) controls.classList.add('hidden');
-
       const grid = document.getElementById('del-grid');
       if (grid) grid.innerHTML = '';
-
       const rangeInput = document.getElementById('del-range');
       if (rangeInput) rangeInput.value = '';
-
       showStatus('Delete Pages module reset.');
+    }
+
+    function resetCropModule() {
+      cropState.file = null;
+      cropState.pages = [];
+      cropState.currentIdx = 0;
+      const fileInput = document.getElementById('crop-file');
+      if (fileInput) fileInput.value = '';
+      const lbl = document.getElementById('crop-file-lbl');
+      if (lbl) lbl.textContent = 'Drag & Drop PDF or Image File Here to Crop';
+      const controls = document.getElementById('crop-controls');
+      if (controls) controls.classList.add('hidden');
+      const strip = document.getElementById('crop-thumbs-strip');
+      if (strip) strip.innerHTML = '';
+      showStatus('Crop Pages module reset.');
     }
 
     // ==========================================
@@ -618,17 +957,14 @@
              type.startsWith('image/');
     }
 
-    // Extracts dropped files with 100% reliability from operating system File Explorers
     async function extractDroppedFiles(dataTransfer) {
       if (!dataTransfer) return [];
 
-      // Step 1: Read direct files immediately (sync snapshot)
       let directFiles = [];
       if (dataTransfer.files && dataTransfer.files.length > 0) {
         directFiles = Array.from(dataTransfer.files).filter(isSupportedPdfOrImage);
       }
 
-      // Step 2: Check if any folders are present
       const items = dataTransfer.items ? Array.from(dataTransfer.items) : [];
       const hasDirectory = items.some(item => {
         if (item.webkitGetAsEntry) {
@@ -638,12 +974,10 @@
         return false;
       });
 
-      // If user dropped regular desktop files (not directories), return direct files immediately
       if (!hasDirectory && directFiles.length > 0) {
         return directFiles;
       }
 
-      // If directories exist, traverse asynchronously
       const folderFiles = [];
       async function traverse(entry) {
         if (!entry) return;
@@ -708,10 +1042,30 @@
       loadDocumentDirectlyIntoStudio(files[0]);
     }
 
+    async function handleCropBoxDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      e.currentTarget.classList.remove('dragover');
+
+      const files = await extractDroppedFiles(e.dataTransfer);
+      if (files.length === 0) {
+        return showStatus('Please drop a valid PDF or image file.', true);
+      }
+      loadCropDocument({ files: [files[0]] });
+    }
+
     async function handleAssemblerBoxDrop(e, targetInsertIndex = null) {
       e.preventDefault();
       e.stopPropagation();
       e.currentTarget.classList.remove('dragover');
+
+      // Check if this was an internal card drag dropped onto the tail box
+      if (assemblerState.draggedIdx !== null) {
+        const fromIdx = assemblerState.draggedIdx;
+        assemblerState.draggedIdx = null;
+        moveAssemblerFile(fromIdx, assemblerState.files.length - 1);
+        return;
+      }
 
       const extractedFiles = await extractDroppedFiles(e.dataTransfer);
       if (extractedFiles.length === 0) {
@@ -835,7 +1189,7 @@
     }
 
     // =========================================================================
-    // UNIVERSAL FILE ASSEMBLER WITH THUMBNAILS & STABLE ZERO-FLICKER DROP SLOTS
+    // UNIVERSAL FILE ASSEMBLER WITH FIXED DRAG REORDER & UNIFIED OUTPUT SIZE
     // =========================================================================
     async function getAssemblerThumbnail(file) {
       if (assemblerState.thumbnailCache.has(file)) {
@@ -900,7 +1254,7 @@
     }
 
     function clearCardDropHighlights(card) {
-      card.classList.remove('drop-line-top', 'drop-line-bottom');
+      card.classList.remove('drop-line-top', 'drop-line-bottom', 'drop-line-left', 'drop-line-right');
       const badgeTop = card.querySelector('.badge-drop-top');
       const badgeBottom = card.querySelector('.badge-drop-bottom');
       if (badgeTop) badgeTop.classList.add('hidden');
@@ -921,28 +1275,26 @@
       assemblerState.files.forEach((f, idx) => {
         const isPdf = f.name.toLowerCase().endsWith('.pdf');
         const card = document.createElement('div');
-        card.className = 'bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 select-none hover:border-slate-700 transition relative';
+        card.className = 'draggable-card bg-slate-900 border border-slate-800 rounded-xl p-3 flex items-center justify-between gap-3 select-none hover:border-slate-700 transition relative';
         card.id = `asm-card-${idx}`;
-        card.draggable = false;
+        card.draggable = true;
 
         const sizeKb = (f.size / 1024).toFixed(1);
 
         card.innerHTML = `
-          <!-- Stable insertion guidance indicators (no layout shifting) -->
           <div class="badge-drop-top hidden absolute -top-3.5 left-1/2 -translate-x-1/2 bg-indigo-600 text-white font-bold text-[10px] px-3 py-0.5 rounded-full shadow-lg z-30 pointer-events-none flex items-center gap-1 border border-indigo-400">
-            <i data-lucide="plus" class="w-3 h-3"></i> Insert Before (#${idx + 1})
+            <i data-lucide="arrow-up-to-line" class="w-3 h-3"></i> Place Before (#${idx + 1})
           </div>
           <div class="badge-drop-bottom hidden absolute -bottom-3.5 left-1/2 -translate-x-1/2 bg-indigo-600 text-white font-bold text-[10px] px-3 py-0.5 rounded-full shadow-lg z-30 pointer-events-none flex items-center gap-1 border border-indigo-400">
-            <i data-lucide="plus" class="w-3 h-3"></i> Insert After (#${idx + 2})
+            <i data-lucide="arrow-down-to-line" class="w-3 h-3"></i> Place After (#${idx + 2})
           </div>
 
           <div class="flex items-center gap-3 min-w-0">
-            <span class="drag-handle-btn p-1 text-slate-400 hover:text-white rounded bg-slate-800/80 hover:bg-slate-700" title="Drag to reorder" draggable="true">
+            <span class="drag-handle-btn p-1.5 text-slate-300 hover:text-white rounded bg-slate-800 hover:bg-indigo-600 transition" title="Drag to reorder">
               <i data-lucide="grip-vertical" class="w-4 h-4 pointer-events-none"></i>
             </span>
             <span class="font-mono text-xs font-bold text-indigo-400 w-6">#${idx + 1}</span>
 
-            <!-- First Page / Image Thumbnail Preview -->
             <div class="w-14 h-16 sm:w-16 sm:h-20 bg-slate-950 rounded-lg border border-slate-700/80 flex items-center justify-center overflow-hidden flex-shrink-0 shadow relative">
               <div id="asm-thumb-loading-${idx}" class="text-[9px] text-slate-500 text-center animate-pulse">Loading...</div>
               <img id="asm-thumb-img-${idx}" class="w-full h-full object-contain hidden pointer-events-none" alt="preview" />
@@ -967,11 +1319,37 @@
           </div>
         `;
 
-        // 100% Reliable dragover / dragleave / drop handling (zero layout shifts)
+        // Prevent drag when clicking action buttons on the right
+        card.addEventListener('mousedown', (e) => {
+          if (isInteractiveControl(e.target)) {
+            card.draggable = false;
+          } else {
+            card.draggable = true;
+          }
+        });
+        card.addEventListener('mouseup', () => { card.draggable = true; });
+
+        card.ondragstart = (e) => {
+          if (isInteractiveControl(e.target)) {
+            e.preventDefault();
+            return;
+          }
+          assemblerState.draggedIdx = idx;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+          setTimeout(() => card.classList.add('drag-active'), 0);
+        };
+
+        card.ondragend = () => {
+          assemblerState.draggedIdx = null;
+          card.classList.remove('drag-active');
+          document.querySelectorAll('#assembler-item-list > div').forEach(clearCardDropHighlights);
+        };
+
         card.ondragover = (e) => {
           e.preventDefault();
           e.stopPropagation();
-          e.dataTransfer.dropEffect = 'copy';
+          e.dataTransfer.dropEffect = assemblerState.draggedIdx !== null ? 'move' : 'copy';
 
           const rect = card.getBoundingClientRect();
           const isTopHalf = (e.clientY - rect.top) < (rect.height / 2);
@@ -993,10 +1371,7 @@
         };
 
         card.ondragleave = (e) => {
-          // Ignore event if mouse is still within this card
-          if (e.relatedTarget && card.contains(e.relatedTarget)) {
-            return;
-          }
+          if (e.relatedTarget && card.contains(e.relatedTarget)) return;
           clearCardDropHighlights(card);
         };
 
@@ -1008,19 +1383,18 @@
           const targetIndex = isTopHalf ? idx : idx + 1;
           clearCardDropHighlights(card);
 
-          // Handle internal card reordering
           if (assemblerState.draggedIdx !== null) {
             const fromIdx = assemblerState.draggedIdx;
+            assemblerState.draggedIdx = null;
             let toIdx = targetIndex;
             if (fromIdx < toIdx) toIdx--;
             if (fromIdx !== toIdx) {
               moveAssemblerFile(fromIdx, toIdx);
+              log(`Moved file from #${fromIdx + 1} to #${toIdx + 1}.`);
             }
-            assemblerState.draggedIdx = null;
             return;
           }
 
-          // Handle external desktop file(s) drop
           if (e.dataTransfer) {
             const extractedFiles = await extractDroppedFiles(e.dataTransfer);
             if (extractedFiles.length > 0) {
@@ -1032,21 +1406,8 @@
           }
         };
 
-        // Bind internal card drag exclusively to the grip handle
-        const handle = card.querySelector('.drag-handle-btn');
-        handle.ondragstart = (e) => {
-          assemblerState.draggedIdx = idx;
-          card.classList.add('drag-active');
-          e.dataTransfer.effectAllowed = 'move';
-        };
-        handle.ondragend = () => {
-          card.classList.remove('drag-active');
-          document.querySelectorAll('#assembler-item-list > div').forEach(clearCardDropHighlights);
-        };
-
         container.appendChild(card);
 
-        // Async render first-page thumbnail
         getAssemblerThumbnail(f).then(thumb => {
           const loadingEl = document.getElementById(`asm-thumb-loading-${idx}`);
           const imgEl = document.getElementById(`asm-thumb-img-${idx}`);
@@ -1107,8 +1468,9 @@
         return showStatus('Please add at least one PDF or image file.', true);
       }
 
-      log(`Assembling ${assemblerState.files.length} items into merged PDF...`);
-      showStatus('Merging documents & images in sequence...', false);
+      const outputSizeMode = document.getElementById('assembler-output-size')?.value || 'A4';
+      log(`Assembling ${assemblerState.files.length} items into merged PDF (Output Size: ${outputSizeMode})...`);
+      showStatus(`Merging documents & images (Target Size: ${outputSizeMode})...`, false);
 
       try {
         const mergedPdf = await PDFLib.PDFDocument.create();
@@ -1120,17 +1482,47 @@
 
           if (file.name.toLowerCase().endsWith('.pdf')) {
             const srcDoc = await PDFLib.PDFDocument.load(fileBuffer);
-            const copiedPages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
-            copiedPages.forEach(p => mergedPdf.addPage(p));
+            if (outputSizeMode === 'original') {
+              const copiedPages = await mergedPdf.copyPages(srcDoc, srcDoc.getPageIndices());
+              copiedPages.forEach(p => mergedPdf.addPage(p));
+            } else {
+              // Unify each PDF page into target size (A4, A3, A5) preserving vector fidelity
+              const srcPages = srcDoc.getPages();
+              for (let pIdx = 0; pIdx < srcPages.length; pIdx++) {
+                const srcPage = srcPages[pIdx];
+                const { width: srcW, height: srcH } = srcPage.getSize();
+                const embeddedPage = await mergedPdf.embedPage(srcPage);
+                const { pageW, pageH, drawW, drawH, offsetX, offsetY } = resolveOutputPageDimensions(srcW, srcH, outputSizeMode);
+                const newPage = mergedPdf.addPage([pageW, pageH]);
+                newPage.drawPage(embeddedPage, {
+                  x: offsetX,
+                  y: offsetY,
+                  width: drawW,
+                  height: drawH
+                });
+              }
+            }
           } else {
             let embeddedImg;
             if (file.type.includes('png') || file.name.toLowerCase().endsWith('.png')) {
               embeddedImg = await mergedPdf.embedPng(fileBuffer);
             } else {
-              embeddedImg = await mergedPdf.embedJpg(fileBuffer);
+              // Convert WebP/BMP or JPG via canvas if needed, or directly embed JPG
+              if (file.type.includes('jpeg') || file.type.includes('jpg') || /\.(jpg|jpeg)$/i.test(file.name)) {
+                embeddedImg = await mergedPdf.embedJpg(fileBuffer);
+              } else {
+                const imgBitmap = await createImageBitmap(file);
+                const tmpCanvas = document.createElement('canvas');
+                tmpCanvas.width = imgBitmap.width;
+                tmpCanvas.height = imgBitmap.height;
+                tmpCanvas.getContext('2d').drawImage(imgBitmap, 0, 0);
+                const jpgBuf = await fetch(tmpCanvas.toDataURL('image/jpeg', 0.92)).then(r => r.arrayBuffer());
+                embeddedImg = await mergedPdf.embedJpg(jpgBuf);
+              }
             }
-            const page = mergedPdf.addPage([embeddedImg.width, embeddedImg.height]);
-            page.drawImage(embeddedImg, { x: 0, y: 0, width: embeddedImg.width, height: embeddedImg.height });
+            const { pageW, pageH, drawW, drawH, offsetX, offsetY } = resolveOutputPageDimensions(embeddedImg.width, embeddedImg.height, outputSizeMode);
+            const page = mergedPdf.addPage([pageW, pageH]);
+            page.drawImage(embeddedImg, { x: offsetX, y: offsetY, width: drawW, height: drawH });
           }
         }
 
@@ -1143,8 +1535,8 @@
           await loadDocumentDirectlyIntoStudio(mergedFile);
           showStatus('Merged successfully and loaded into All-in-One Studio!');
         } else {
-          downloadBlob(mergedBytes, 'assembled_document.pdf');
-          showStatus('Files merged and downloaded successfully!');
+          downloadBlob(mergedBytes, `assembled_${outputSizeMode}.pdf`);
+          showStatus(`Files merged to ${outputSizeMode} and downloaded successfully!`);
         }
       } catch (err) {
         log(`Error during assembly: ${err.message}`);
@@ -1152,7 +1544,9 @@
       }
     }
 
-    // Direct Studio loader
+    // =========================================================================
+    // ALL-IN-ONE STUDIO (FIXED DRAG REORDER + CROP + UNIFIED OUTPUT PAGE SIZE)
+    // =========================================================================
     async function loadDocumentDirectlyIntoStudio(file) {
       combinedState.file = file;
       combinedState.pages = [];
@@ -1183,7 +1577,8 @@
               fitMode: 'same',
               bwMode: 'standard',
               gamma: 0.20,
-              selected: true
+              selected: true,
+              crop: { x: 0, y: 0, w: 1, h: 1 }
             });
           }
         } else {
@@ -1202,7 +1597,8 @@
             fitMode: 'same',
             bwMode: 'standard',
             gamma: 0.20,
-            selected: true
+            selected: true,
+            crop: { x: 0, y: 0, w: 1, h: 1 }
           });
         }
 
@@ -1216,30 +1612,45 @@
       }
     }
 
-    // =========================================================================
-    // ALL-IN-ONE STUDIO IMPLEMENTATION
-    // =========================================================================
     function setCombinedGridColumns(cols) {
       combinedState.currentCols = cols;
       const grid = document.getElementById('combined-grid');
       if (!grid) return;
-      grid.classList.remove('md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3');
-      grid.classList.add(`md:grid-cols-${cols}`);
+      grid.classList.remove('md:grid-cols-1', 'md:grid-cols-2', 'md:grid-cols-3', 'md:grid-cols-6', 'sm:grid-cols-2', 'sm:grid-cols-3', 'gap-4', 'gap-2.5');
+      if (cols === 6) {
+        grid.classList.add('sm:grid-cols-3', 'md:grid-cols-6', 'gap-2.5');
+      } else {
+        grid.classList.add('sm:grid-cols-2', `md:grid-cols-${cols}`, 'gap-4');
+      }
 
-      [1, 2, 3].forEach(c => {
+      [1, 2, 3, 6].forEach(c => {
         const btn = document.getElementById(`btn-comb-col-${c}`);
         if (btn) {
           btn.className = (c === cols) 
-            ? 'px-2.5 py-1 rounded bg-indigo-600 text-white font-medium'
-            : 'px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium';
+            ? 'px-2.5 py-1 rounded bg-indigo-600 text-white font-medium flex items-center gap-1 shadow'
+            : 'px-2.5 py-1 rounded bg-slate-800 text-slate-300 hover:text-white font-medium flex items-center gap-1';
         }
       });
 
-      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]' };
-      document.querySelectorAll('.combined-preview-viewport').forEach(el => {
-        el.classList.remove('h-[750px]', 'h-[520px]', 'h-[360px]');
-        el.classList.add(heightMap[cols]);
-      });
+      renderCombinedGrid();
+    }
+
+    // Smooth auto-scroll when dragging a page near the top or bottom edge of #combined-grid
+    function handleStudioGridAutoScroll(e) {
+      if (combinedState.draggedIdx === null) return;
+      const grid = document.getElementById('combined-grid');
+      if (!grid) return;
+      const rect = grid.getBoundingClientRect();
+      const edgeThreshold = 65;
+      const maxScrollSpeed = 16;
+
+      if (e.clientY - rect.top < edgeThreshold) {
+        const intensity = Math.max(0.2, 1 - (e.clientY - rect.top) / edgeThreshold);
+        grid.scrollTop -= Math.round(maxScrollSpeed * intensity);
+      } else if (rect.bottom - e.clientY < edgeThreshold) {
+        const intensity = Math.max(0.2, 1 - (rect.bottom - e.clientY) / edgeThreshold);
+        grid.scrollTop += Math.round(maxScrollSpeed * intensity);
+      }
     }
 
     function getCombinedRenderTransform(srcWidth, srcHeight, rotationDeg, fineAngleDeg, fitMode) {
@@ -1274,72 +1685,185 @@
       return { targetW, targetH, scale, totalAngleRad: ((rotationDeg + fineAngleDeg) * Math.PI) / 180 };
     }
 
+    // Generates the uncropped (leveled + B/W) canvas for a Studio page
+    function renderStudioBaseProcessedCanvas(idx) {
+      const p = combinedState.pages[idx];
+      const src = p.originalCanvas;
+      const { targetW, targetH, scale, totalAngleRad } = getCombinedRenderTransform(src.width, src.height, p.rotation, p.fineAngle, p.fitMode || 'same');
+
+      const baseCanvas = document.createElement('canvas');
+      baseCanvas.width = targetW;
+      baseCanvas.height = targetH;
+      const ctx = baseCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, targetW, targetH);
+
+      ctx.save();
+      ctx.translate(targetW / 2, targetH / 2);
+      ctx.rotate(totalAngleRad);
+      ctx.scale(scale, scale);
+      ctx.drawImage(src, -src.width / 2, -src.height / 2);
+      ctx.restore();
+
+      if (p.bwMode !== 'none') {
+        const isGimp = p.bwMode === 'gimp';
+        const maxVal = isGimp ? 200 : 240;
+        const gamma = p.gamma;
+        const imgData = ctx.getImageData(0, 0, targetW, targetH);
+        const data = imgData.data;
+
+        for (let j = 0; j < data.length; j += 4) {
+          let gray = isGimp 
+            ? (data[j]*0.333 + data[j+1]*0.333 + data[j+2]*0.333)
+            : (data[j]*0.299 + data[j+1]*0.587 + data[j+2]*0.114);
+          let norm = Math.min(Math.max(gray / maxVal, 0), 1);
+          let corrected = Math.pow(norm, 1.0 / gamma) * 255;
+          data[j] = data[j+1] = data[j+2] = Math.min(Math.max(corrected, 0), 255);
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+      return baseCanvas;
+    }
+
     async function loadCombinedDocument(input) {
       if (!input.files || input.files.length === 0) return;
       const file = input.files[0];
       await loadDocumentDirectlyIntoStudio(file);
     }
 
+    function isPageCropped(crop) {
+      if (!crop) return false;
+      return crop.x > 0.005 || crop.y > 0.005 || crop.w < 0.995 || crop.h < 0.995;
+    }
+
     function renderCombinedGrid() {
       const grid = document.getElementById('combined-grid');
       if (!grid) return;
       grid.innerHTML = '';
-      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]' };
+      const isCompact6 = combinedState.currentCols === 6;
+      const heightMap = { 1: 'h-[750px]', 2: 'h-[520px]', 3: 'h-[360px]', 6: 'h-[175px]' };
       const currentHeightClass = heightMap[combinedState.currentCols] || 'h-[360px]';
 
       combinedState.pages.forEach((p, idx) => {
+        const hasCrop = isPageCropped(p.crop);
         const card = document.createElement('div');
-        card.className = `rounded-xl p-3 flex flex-col items-center gap-2 select-none relative transition-all border-2 ${
+        card.className = `draggable-card rounded-xl ${isCompact6 ? 'p-2 gap-1.5' : 'p-3 gap-2'} flex flex-col items-center select-none relative transition-all border-2 ${
           p.selected 
             ? 'bg-slate-900 border-emerald-500 shadow-md shadow-emerald-950/40' 
             : 'bg-slate-950 border-slate-800 opacity-60'
         }`;
         card.id = `comb-card-${idx}`;
-        card.draggable = false;
+        card.draggable = true;
 
-        card.ondragover = (e) => { e.preventDefault(); card.classList.add('drop-target'); };
-        card.ondragleave = () => { card.classList.remove('drop-target'); };
+        // Disable card dragging when user interacts with sliders, selects, or buttons inside card
+        card.addEventListener('mousedown', (e) => {
+          if (isInteractiveControl(e.target)) {
+            card.draggable = false;
+          } else {
+            card.draggable = true;
+          }
+        });
+        card.addEventListener('mouseup', () => { card.draggable = true; });
+
+        card.ondragstart = (e) => {
+          if (isInteractiveControl(e.target)) {
+            e.preventDefault();
+            return;
+          }
+          combinedState.draggedIdx = idx;
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', String(idx));
+          setTimeout(() => card.classList.add('drag-active'), 0);
+        };
+
+        card.ondragend = () => {
+          combinedState.draggedIdx = null;
+          card.classList.remove('drag-active');
+          document.querySelectorAll('#combined-grid > div').forEach(clearCardDropHighlights);
+        };
+
+        card.ondragover = (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleStudioGridAutoScroll(e);
+          if (combinedState.draggedIdx === null || combinedState.draggedIdx === idx) return;
+          e.dataTransfer.dropEffect = 'move';
+
+          const rect = card.getBoundingClientRect();
+          const isFirstHalf = (e.clientX - rect.left) < (rect.width / 2);
+          if (isFirstHalf) {
+            card.classList.add('drop-line-left');
+            card.classList.remove('drop-line-right');
+          } else {
+            card.classList.add('drop-line-right');
+            card.classList.remove('drop-line-left');
+          }
+        };
+
+        card.ondragleave = (e) => {
+          if (e.relatedTarget && card.contains(e.relatedTarget)) return;
+          clearCardDropHighlights(card);
+        };
+
         card.ondrop = (e) => {
           e.preventDefault();
-          card.classList.remove('drop-target');
+          e.stopPropagation();
+          const rect = card.getBoundingClientRect();
+          const isFirstHalf = (e.clientX - rect.left) < (rect.width / 2);
+          clearCardDropHighlights(card);
+
           if (combinedState.draggedIdx !== null && combinedState.draggedIdx !== idx) {
-            moveCombinedPage(combinedState.draggedIdx, idx);
+            const fromIdx = combinedState.draggedIdx;
+            combinedState.draggedIdx = null;
+            let toIdx = isFirstHalf ? idx : idx + 1;
+            if (fromIdx < toIdx) toIdx--;
+            moveCombinedPage(fromIdx, toIdx);
+            log(`Reordered page from #${fromIdx + 1} to #${toIdx + 1}.`);
           }
         };
 
         const controls = document.createElement('div');
-        controls.className = 'flex items-center justify-between w-full text-xs text-slate-300 mt-1';
-        controls.innerHTML = `
-          <div class="flex items-center gap-1.5">
-            <span class="drag-handle-btn p-1 text-slate-400 hover:text-white rounded bg-slate-800/80 hover:bg-slate-700" title="Drag to reorder" draggable="true">
-              <i data-lucide="grip-vertical" class="w-3.5 h-3.5 pointer-events-none"></i>
-            </span>
-            <span class="font-bold text-white">#${idx + 1} <span class="text-[11px] font-normal text-slate-400">(P.${p.pageNum})</span></span>
-            <button type="button" onclick="moveCombinedStep(${idx}, -1)" ${idx === 0 ? 'disabled class="opacity-30 p-0.5"' : 'class="p-0.5 hover:bg-slate-800 rounded text-slate-300"'} title="Move left">←</button>
-            <button type="button" onclick="moveCombinedStep(${idx}, 1)" ${idx === combinedState.pages.length - 1 ? 'disabled class="opacity-30 p-0.5"' : 'class="p-0.5 hover:bg-slate-800 rounded text-slate-300"'} title="Move right">→</button>
-          </div>
-          <div class="flex items-center gap-1">
-            <button type="button" onclick="autoDetectSingleCombined(${idx})" title="Auto-detect tilt" class="px-1.5 py-0.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded text-[10px] font-medium flex items-center gap-1">
-              <i data-lucide="zap" class="w-3 h-3"></i> Auto
-            </button>
-            <button type="button" onclick="rotateSingleCombined(${idx}, -90)" title="Rotate -90°" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[10px]"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i></button>
-            <button type="button" onclick="rotateSingleCombined(${idx}, 90)" title="Rotate +90°" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[10px]"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i></button>
-          </div>
-        `;
-
-        const handle = controls.querySelector('.drag-handle-btn');
-        handle.ondragstart = (e) => {
-          combinedState.draggedIdx = idx;
-          card.classList.add('drag-active');
-          e.dataTransfer.effectAllowed = 'move';
-        };
-        handle.ondragend = () => {
-          card.classList.remove('drag-active');
-          document.querySelectorAll('#combined-grid .drop-target').forEach(el => el.classList.remove('drop-target'));
-        };
+        controls.className = 'flex items-center justify-between w-full text-xs text-slate-300 gap-1 flex-wrap';
+        if (isCompact6) {
+          controls.innerHTML = `
+            <div class="flex items-center gap-1">
+              <span class="drag-handle-btn p-0.5 text-slate-300 hover:text-white rounded bg-slate-800 hover:bg-indigo-600 transition" title="Drag card to reorder">
+                <i data-lucide="grip-vertical" class="w-3 h-3 pointer-events-none"></i>
+              </span>
+              <span class="font-bold text-[11px] text-white">#${idx + 1} <span class="text-[10px] font-normal text-slate-400">(P.${p.pageNum})</span></span>
+            </div>
+            <div class="flex items-center gap-0.5">
+              <button type="button" onclick="openStudioCropModal(${idx})" title="Interactive Live Crop" class="px-1 py-0.5 ${hasCrop ? 'bg-emerald-600 text-white' : 'bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white'} rounded text-[9px] font-medium">
+                <i data-lucide="crop" class="w-2.5 h-2.5"></i>
+              </button>
+              <button type="button" onclick="rotateSingleCombined(${idx}, 90)" title="Rotate +90°" class="p-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[9px]"><i data-lucide="rotate-cw" class="w-2.5 h-2.5"></i></button>
+            </div>
+          `;
+        } else {
+          controls.innerHTML = `
+            <div class="flex items-center gap-1">
+              <span class="drag-handle-btn p-1 text-slate-300 hover:text-white rounded bg-slate-800 hover:bg-indigo-600 transition" title="Drag card to reorder">
+                <i data-lucide="grip-vertical" class="w-3.5 h-3.5 pointer-events-none"></i>
+              </span>
+              <span class="font-bold text-white">#${idx + 1} <span class="text-[11px] font-normal text-slate-400">(P.${p.pageNum})</span></span>
+              <button type="button" onclick="moveCombinedStep(${idx}, -1)" ${idx === 0 ? 'disabled class="opacity-30 p-0.5"' : 'class="p-0.5 hover:bg-slate-800 rounded text-slate-300"'} title="Move left">←</button>
+              <button type="button" onclick="moveCombinedStep(${idx}, 1)" ${idx === combinedState.pages.length - 1 ? 'disabled class="opacity-30 p-0.5"' : 'class="p-0.5 hover:bg-slate-800 rounded text-slate-300"'} title="Move right">→</button>
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="openStudioCropModal(${idx})" title="Interactive Live Crop" class="px-1.5 py-0.5 ${hasCrop ? 'bg-emerald-600 text-white' : 'bg-indigo-600/30 hover:bg-indigo-600 text-indigo-300 hover:text-white'} border border-indigo-500/40 rounded text-[10px] font-medium flex items-center gap-1">
+                <i data-lucide="crop" class="w-3 h-3"></i> ${hasCrop ? 'Cropped' : 'Crop'}
+              </button>
+              <button type="button" onclick="autoDetectSingleCombined(${idx})" title="Auto-detect tilt" class="px-1.5 py-0.5 bg-indigo-600/30 hover:bg-indigo-600 border border-indigo-500/40 text-indigo-300 hover:text-white rounded text-[10px] font-medium flex items-center gap-1">
+                <i data-lucide="zap" class="w-3 h-3"></i> Auto
+              </button>
+              <button type="button" onclick="rotateSingleCombined(${idx}, -90)" title="Rotate -90°" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[10px]"><i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i></button>
+              <button type="button" onclick="rotateSingleCombined(${idx}, 90)" title="Rotate +90°" class="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 rounded text-[10px]"><i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i></button>
+            </div>
+          `;
+        }
 
         const previewContainer = document.createElement('div');
-        previewContainer.className = `combined-preview-viewport w-full ${currentHeightClass} flex items-center justify-center overflow-hidden bg-black/60 rounded-lg p-2 border border-slate-800 relative cursor-pointer`;
+        previewContainer.className = `combined-preview-viewport w-full ${currentHeightClass} flex items-center justify-center overflow-hidden bg-black/60 rounded-lg ${isCompact6 ? 'p-1' : 'p-2'} border border-slate-800 relative cursor-pointer`;
         previewContainer.onclick = () => toggleCombinedPageSelection(idx);
 
         const previewCanvas = document.createElement('canvas');
@@ -1350,49 +1874,64 @@
         const selectRow = document.createElement('div');
         selectRow.className = 'w-full flex items-center justify-between text-xs px-1 cursor-pointer';
         selectRow.onclick = () => toggleCombinedPageSelection(idx);
-        selectRow.innerHTML = `
-          <label class="flex items-center gap-1.5 cursor-pointer pointer-events-none text-slate-300">
-            <input type="checkbox" ${p.selected ? 'checked' : ''} class="rounded border-slate-700 text-emerald-500 focus:ring-0">
-            <span class="text-[11px] font-medium">${p.selected ? 'Include in Export' : 'Skip Page'}</span>
-          </label>
-          <span class="text-[10px] ${p.selected ? 'text-emerald-400 font-bold' : 'text-slate-500'}">${p.selected ? '✓ Selected' : 'Excluded'}</span>
-        `;
-
-        const tiltRow = document.createElement('div');
-        tiltRow.className = 'w-full flex items-center justify-between gap-3 text-xs text-slate-400 bg-slate-950/60 px-2 py-1.5 rounded-lg border border-slate-800/60';
-        tiltRow.innerHTML = `
-          <span class="text-[11px] font-medium text-slate-400">Tilt:</span>
-          <input type="range" id="comb-slider-${idx}" min="-15" max="15" step="0.2" value="${p.fineAngle}" class="flex-1 h-2 bg-slate-700 rounded appearance-none cursor-pointer" oninput="updateSingleCombinedAngle(${idx}, this.value)">
-          <span id="comb-angle-lbl-${idx}" class="font-mono text-indigo-400 w-12 text-right font-medium">${p.fineAngle.toFixed(1)}°</span>
-        `;
-
-        const bwRow = document.createElement('div');
-        bwRow.className = 'w-full grid grid-cols-2 gap-2 text-xs bg-slate-950/60 p-2 rounded-lg border border-slate-800/60';
-        bwRow.innerHTML = `
-          <div>
-            <label class="block text-[10px] text-slate-400 mb-0.5">B/W Clean:</label>
-            <select id="comb-bw-${idx}" onchange="updateCombinedBw(${idx})" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-slate-200">
-              <option value="none" ${p.bwMode === 'none' ? 'selected' : ''}>Original Color</option>
-              <option value="standard" ${p.bwMode === 'standard' ? 'selected' : ''}>Standard (240)</option>
-              <option value="gimp" ${p.bwMode === 'gimp' ? 'selected' : ''}>Paper White (200)</option>
-            </select>
-          </div>
-          <div>
-            <label class="block text-[10px] text-slate-400 mb-0.5">Gamma:</label>
-            <select id="comb-gamma-${idx}" onchange="updateCombinedBw(${idx})" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-slate-200">
-              <option value="0.10" ${p.gamma === 0.1 ? 'selected' : ''}>0.10 (Heavy)</option>
-              <option value="0.20" ${p.gamma === 0.2 ? 'selected' : ''}>0.20 (Standard)</option>
-              <option value="0.40" ${p.gamma === 0.4 ? 'selected' : ''}>0.40 (Medium)</option>
-              <option value="0.60" ${p.gamma === 0.6 ? 'selected' : ''}>0.60 (Light)</option>
-            </select>
-          </div>
-        `;
+        selectRow.innerHTML = isCompact6
+          ? `
+            <label class="flex items-center gap-1 cursor-pointer pointer-events-none text-slate-300">
+              <input type="checkbox" ${p.selected ? 'checked' : ''} class="rounded border-slate-700 text-emerald-500 focus:ring-0 w-3 h-3">
+              <span class="text-[10px] font-medium">${p.selected ? 'Keep' : 'Skip'}</span>
+            </label>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="event.stopPropagation(); moveCombinedStep(${idx}, -1)" ${idx === 0 ? 'disabled class="opacity-25 text-[10px]"' : 'class="px-1 hover:bg-slate-800 rounded text-slate-300 text-[10px]"'} title="Move Left">←</button>
+              <button type="button" onclick="event.stopPropagation(); moveCombinedStep(${idx}, 1)" ${idx === combinedState.pages.length - 1 ? 'disabled class="opacity-25 text-[10px]"' : 'class="px-1 hover:bg-slate-800 rounded text-slate-300 text-[10px]"'} title="Move Right">→</button>
+            </div>
+          `
+          : `
+            <label class="flex items-center gap-1.5 cursor-pointer pointer-events-none text-slate-300">
+              <input type="checkbox" ${p.selected ? 'checked' : ''} class="rounded border-slate-700 text-emerald-500 focus:ring-0">
+              <span class="text-[11px] font-medium">${p.selected ? 'Include in Export' : 'Skip Page'}</span>
+            </label>
+            <span class="text-[10px] ${p.selected ? 'text-emerald-400 font-bold' : 'text-slate-500'}">${p.selected ? '✓ Selected' : 'Excluded'}</span>
+          `;
 
         card.appendChild(controls);
         card.appendChild(previewContainer);
         card.appendChild(selectRow);
-        card.appendChild(tiltRow);
-        card.appendChild(bwRow);
+
+        if (!isCompact6) {
+          const tiltRow = document.createElement('div');
+          tiltRow.className = 'w-full flex items-center justify-between gap-3 text-xs text-slate-400 bg-slate-950/60 px-2 py-1.5 rounded-lg border border-slate-800/60';
+          tiltRow.innerHTML = `
+            <span class="text-[11px] font-medium text-slate-400">Tilt:</span>
+            <input type="range" id="comb-slider-${idx}" min="-15" max="15" step="0.2" value="${p.fineAngle}" class="flex-1 h-2 bg-slate-700 rounded appearance-none cursor-pointer" oninput="updateSingleCombinedAngle(${idx}, this.value)">
+            <span id="comb-angle-lbl-${idx}" class="font-mono text-indigo-400 w-12 text-right font-medium">${p.fineAngle.toFixed(1)}°</span>
+          `;
+
+          const bwRow = document.createElement('div');
+          bwRow.className = 'w-full grid grid-cols-2 gap-2 text-xs bg-slate-950/60 p-2 rounded-lg border border-slate-800/60';
+          bwRow.innerHTML = `
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">B/W Clean:</label>
+              <select id="comb-bw-${idx}" onchange="updateCombinedBw(${idx})" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-slate-200">
+                <option value="none" ${p.bwMode === 'none' ? 'selected' : ''}>Original Color</option>
+                <option value="standard" ${p.bwMode === 'standard' ? 'selected' : ''}>Standard (240)</option>
+                <option value="gimp" ${p.bwMode === 'gimp' ? 'selected' : ''}>Paper White (200)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-[10px] text-slate-400 mb-0.5">Gamma:</label>
+              <select id="comb-gamma-${idx}" onchange="updateCombinedBw(${idx})" class="w-full bg-slate-900 border border-slate-700 rounded px-1.5 py-1 text-[11px] text-slate-200">
+                <option value="0.10" ${p.gamma === 0.1 ? 'selected' : ''}>0.10 (Heavy)</option>
+                <option value="0.20" ${p.gamma === 0.2 ? 'selected' : ''}>0.20 (Standard)</option>
+                <option value="0.40" ${p.gamma === 0.4 ? 'selected' : ''}>0.40 (Medium)</option>
+                <option value="0.60" ${p.gamma === 0.6 ? 'selected' : ''}>0.60 (Light)</option>
+              </select>
+            </div>
+          `;
+
+          card.appendChild(tiltRow);
+          card.appendChild(bwRow);
+        }
+
         grid.appendChild(card);
 
         drawCombinedPreview(idx);
@@ -1477,39 +2016,20 @@
       const previewCanvas = document.getElementById(`comb-canvas-${idx}`);
       if (!previewCanvas) return;
 
-      const src = p.originalCanvas;
-      const { targetW, targetH, scale, totalAngleRad } = getCombinedRenderTransform(src.width, src.height, p.rotation, p.fineAngle, p.fitMode || 'same');
+      const baseCanvas = renderStudioBaseProcessedCanvas(idx);
+      const crop = p.crop || { x: 0, y: 0, w: 1, h: 1 };
 
-      previewCanvas.width = targetW;
-      previewCanvas.height = targetH;
+      const sx = Math.round(crop.x * baseCanvas.width);
+      const sy = Math.round(crop.y * baseCanvas.height);
+      const sw = Math.max(1, Math.round(crop.w * baseCanvas.width));
+      const sh = Math.max(1, Math.round(crop.h * baseCanvas.height));
+
+      previewCanvas.width = sw;
+      previewCanvas.height = sh;
       const ctx = previewCanvas.getContext('2d');
       ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, targetW, targetH);
-
-      ctx.save();
-      ctx.translate(targetW / 2, targetH / 2);
-      ctx.rotate(totalAngleRad);
-      ctx.scale(scale, scale);
-      ctx.drawImage(src, -src.width / 2, -src.height / 2);
-      ctx.restore();
-
-      if (p.bwMode !== 'none') {
-        const isGimp = p.bwMode === 'gimp';
-        const maxVal = isGimp ? 200 : 240;
-        const gamma = p.gamma;
-        const imgData = ctx.getImageData(0, 0, targetW, targetH);
-        const data = imgData.data;
-
-        for (let j = 0; j < data.length; j += 4) {
-          let gray = isGimp 
-            ? (data[j]*0.333 + data[j+1]*0.333 + data[j+2]*0.333)
-            : (data[j]*0.299 + data[j+1]*0.587 + data[j+2]*0.114);
-          let norm = Math.min(Math.max(gray / maxVal, 0), 1);
-          let corrected = Math.pow(norm, 1.0 / gamma) * 255;
-          data[j] = data[j+1] = data[j+2] = Math.min(Math.max(corrected, 0), 255);
-        }
-        ctx.putImageData(imgData, 0, 0);
-      }
+      ctx.fillRect(0, 0, sw, sh);
+      ctx.drawImage(baseCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
     }
 
     function updateSingleCombinedAngle(idx, val) {
@@ -1577,68 +2097,629 @@
       }
     }
 
+    function resetAllStudioCrops() {
+      combinedState.pages.forEach(p => { p.crop = { x: 0, y: 0, w: 1, h: 1 }; });
+      renderCombinedGrid();
+      showStatus('All Studio page crops reset to full page.');
+    }
+
     async function applyCombinedAndSave() {
       if (combinedState.pages.length === 0) return showStatus('No document loaded.', true);
       const exportPages = combinedState.pages.filter(p => p.selected);
       if (exportPages.length === 0) return showStatus('No pages selected to export.', true);
 
-      log(`Exporting ${exportPages.length} pages in custom order...`);
+      const outputSizeMode = document.getElementById('comb-output-size')?.value || 'A4';
+      log(`Exporting ${exportPages.length} pages in custom order (Output Page Size: ${outputSizeMode})...`);
 
       const newPdf = await PDFLib.PDFDocument.create();
 
       for (let i = 0; i < exportPages.length; i++) {
         const p = exportPages[i];
+        const actualIdx = combinedState.pages.indexOf(p);
         log(`Rendering Page ${i + 1}/${exportPages.length} (Orig Page ${p.pageNum})...`);
 
-        const src = p.originalCanvas;
-        const { targetW, targetH, scale, totalAngleRad } = getCombinedRenderTransform(src.width, src.height, p.rotation, p.fineAngle, p.fitMode || 'same');
+        const baseCanvas = renderStudioBaseProcessedCanvas(actualIdx);
+        const crop = p.crop || { x: 0, y: 0, w: 1, h: 1 };
 
-        const outCanvas = document.createElement('canvas');
-        outCanvas.width = targetW; outCanvas.height = targetH;
-        const ctx = outCanvas.getContext('2d');
-        ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, targetW, targetH);
+        const sx = Math.round(crop.x * baseCanvas.width);
+        const sy = Math.round(crop.y * baseCanvas.height);
+        const sw = Math.max(1, Math.round(crop.w * baseCanvas.width));
+        const sh = Math.max(1, Math.round(crop.h * baseCanvas.height));
 
-        ctx.save();
-        ctx.translate(targetW / 2, targetH / 2);
-        ctx.rotate(totalAngleRad);
-        ctx.scale(scale, scale);
-        ctx.drawImage(src, -src.width / 2, -src.height / 2);
-        ctx.restore();
+        const croppedCanvas = document.createElement('canvas');
+        croppedCanvas.width = sw;
+        croppedCanvas.height = sh;
+        const cCtx = croppedCanvas.getContext('2d');
+        cCtx.fillStyle = '#ffffff';
+        cCtx.fillRect(0, 0, sw, sh);
+        cCtx.drawImage(baseCanvas, sx, sy, sw, sh, 0, 0, sw, sh);
 
-        if (p.bwMode !== 'none') {
-          const isGimp = p.bwMode === 'gimp';
-          const maxVal = isGimp ? 200 : 240;
-          const gamma = p.gamma;
-          const imgData = ctx.getImageData(0, 0, targetW, targetH);
-          const data = imgData.data;
-
-          for (let j = 0; j < data.length; j += 4) {
-            let gray = isGimp 
-              ? (data[j]*0.333 + data[j+1]*0.333 + data[j+2]*0.333)
-              : (data[j]*0.299 + data[j+1]*0.587 + data[j+2]*0.114);
-            let norm = Math.min(Math.max(gray / maxVal, 0), 1);
-            let corrected = Math.pow(norm, 1.0 / gamma) * 255;
-            data[j] = data[j+1] = data[j+2] = Math.min(Math.max(corrected, 0), 255);
-          }
-          ctx.putImageData(imgData, 0, 0);
-        }
-
-        const jpegUrl = outCanvas.toDataURL('image/jpeg', 0.92);
+        const jpegUrl = croppedCanvas.toDataURL('image/jpeg', 0.92);
         const imgBytes = await fetch(jpegUrl).then(r => r.arrayBuffer());
         const embeddedImg = await newPdf.embedJpg(imgBytes);
 
-        const newPage = newPdf.addPage([targetW, targetH]);
-        newPage.drawImage(embeddedImg, { x: 0, y: 0, width: targetW, height: targetH });
+        // Determine PDF page box based on selected Output Page Size
+        let pageW, pageH, drawW, drawH, offsetX, offsetY;
+        if (outputSizeMode === 'original') {
+          // Original uncropped page size (in points/pixels), centering cropped content
+          pageW = baseCanvas.width / 2;
+          pageH = baseCanvas.height / 2;
+          const fit = resolveOutputPageDimensions(sw, sh, 'cropped');
+          const scaleToOrig = Math.min(pageW / sw, pageH / sh);
+          drawW = sw * scaleToOrig;
+          drawH = sh * scaleToOrig;
+          offsetX = (pageW - drawW) / 2;
+          offsetY = (pageH - drawH) / 2;
+        } else if (outputSizeMode === 'cropped') {
+          pageW = sw / 2;
+          pageH = sh / 2;
+          drawW = pageW;
+          drawH = pageH;
+          offsetX = 0;
+          offsetY = 0;
+        } else {
+          // A4, A3, A5
+          const dims = resolveOutputPageDimensions(sw, sh, outputSizeMode);
+          pageW = dims.pageW;
+          pageH = dims.pageH;
+          drawW = dims.drawW;
+          drawH = dims.drawH;
+          offsetX = dims.offsetX;
+          offsetY = dims.offsetY;
+        }
+
+        const newPage = newPdf.addPage([pageW, pageH]);
+        newPage.drawImage(embeddedImg, { x: offsetX, y: offsetY, width: drawW, height: drawH });
       }
 
       const outBytes = await newPdf.save();
       const originalName = combinedState.file.name.replace(/\.[^/.]+$/, "");
-      downloadBlob(outBytes, `${originalName}_processed.pdf`);
-      showStatus('Processed PDF exported successfully!');
+      downloadBlob(outBytes, `${originalName}_${outputSizeMode}_processed.pdf`);
+      showStatus(`Processed PDF exported (${outputSizeMode}) successfully!`);
+    }
+
+    // =========================================================================
+    // INTERACTIVE LIVE CROP ENGINE (SHARED BY STUDIO MODAL & CROP MODULE)
+    // =========================================================================
+    function initCropInteractiveDrag(stageId, boxId, mode) {
+      const stage = document.getElementById(stageId);
+      const box = document.getElementById(boxId);
+      if (!stage || !box) return;
+
+      let dragAction = null; // 'move' or handle direction 'nw','n',etc.
+      let startX = 0, startY = 0;
+      let startCrop = { x: 0, y: 0, w: 1, h: 1 };
+
+      function getActiveCropRef() {
+        if (mode === 'module') {
+          const page = cropState.pages[cropState.currentIdx];
+          return page ? page.crop : null;
+        } else {
+          const page = combinedState.pages[combinedState.activeCropPageIdx];
+          return page ? page.crop : null;
+        }
+      }
+
+      function onPointerDown(e) {
+        const cropRef = getActiveCropRef();
+        if (!cropRef) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const handle = e.target.getAttribute('data-handle');
+        dragAction = handle ? handle : 'move';
+
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        startX = clientX;
+        startY = clientY;
+        startCrop = { ...cropRef };
+
+        window.addEventListener('mousemove', onPointerMove);
+        window.addEventListener('mouseup', onPointerUp);
+        window.addEventListener('touchmove', onPointerMove, { passive: false });
+        window.addEventListener('touchend', onPointerUp);
+      }
+
+      function onPointerMove(e) {
+        if (!dragAction) return;
+        e.preventDefault();
+
+        const cropRef = getActiveCropRef();
+        if (!cropRef) return;
+
+        const rect = stage.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+        const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+        const dx = (clientX - startX) / rect.width;
+        const dy = (clientY - startY) / rect.height;
+
+        const minSize = 0.05;
+        let { x, y, w, h } = startCrop;
+
+        if (dragAction === 'move') {
+          x = Math.min(Math.max(0, x + dx), 1 - w);
+          y = Math.min(Math.max(0, y + dy), 1 - h);
+        } else {
+          if (dragAction.includes('w')) {
+            const newX = Math.min(Math.max(0, x + dx), x + w - minSize);
+            w = w + (x - newX);
+            x = newX;
+          }
+          if (dragAction.includes('e')) {
+            w = Math.min(Math.max(minSize, w + dx), 1 - x);
+          }
+          if (dragAction.includes('n')) {
+            const newY = Math.min(Math.max(0, y + dy), y + h - minSize);
+            h = h + (y - newY);
+            y = newY;
+          }
+          if (dragAction.includes('s')) {
+            h = Math.min(Math.max(minSize, h + dy), 1 - y);
+          }
+        }
+
+        cropRef.x = x;
+        cropRef.y = y;
+        cropRef.w = w;
+        cropRef.h = h;
+
+        if (mode === 'module') {
+          syncCropOverlayUI();
+          renderCropLiveOutput();
+        } else {
+          syncStudioCropModalUI();
+        }
+      }
+
+      function onPointerUp() {
+        dragAction = null;
+        window.removeEventListener('mousemove', onPointerMove);
+        window.removeEventListener('mouseup', onPointerUp);
+        window.removeEventListener('touchmove', onPointerMove);
+        window.removeEventListener('touchend', onPointerUp);
+      }
+
+      box.addEventListener('mousedown', onPointerDown);
+      box.addEventListener('touchstart', onPointerDown, { passive: false });
+    }
+
+    // Studio Crop Modal Functions
+    function openStudioCropModal(idx) {
+      if (!combinedState.pages[idx]) return;
+      combinedState.activeCropPageIdx = idx;
+      const modal = document.getElementById('studio-crop-modal');
+      modal.classList.remove('hidden');
+      loadPageIntoStudioCropModal();
+      lucide.createIcons();
+    }
+
+    function closeStudioCropModal() {
+      document.getElementById('studio-crop-modal').classList.add('hidden');
+      renderCombinedGrid();
+    }
+
+    function stepStudioCropModal(delta) {
+      const next = combinedState.activeCropPageIdx + delta;
+      if (next >= 0 && next < combinedState.pages.length) {
+        combinedState.activeCropPageIdx = next;
+        loadPageIntoStudioCropModal();
+      }
+    }
+
+    function loadPageIntoStudioCropModal() {
+      const idx = combinedState.activeCropPageIdx;
+      const p = combinedState.pages[idx];
+      if (!p) return;
+
+      document.getElementById('studio-crop-title').textContent = `Card #${idx + 1} (Orig Page ${p.pageNum})`;
+      const srcCanvas = document.getElementById('studio-crop-source-canvas');
+      const baseCanvas = renderStudioBaseProcessedCanvas(idx);
+      srcCanvas.width = baseCanvas.width;
+      srcCanvas.height = baseCanvas.height;
+      srcCanvas.getContext('2d').drawImage(baseCanvas, 0, 0);
+      srcCanvas._baseCanvas = baseCanvas;
+
+      syncStudioCropModalUI();
+    }
+
+    function syncStudioCropModalUI() {
+      const idx = combinedState.activeCropPageIdx;
+      const p = combinedState.pages[idx];
+      if (!p) return;
+      const crop = p.crop || { x: 0, y: 0, w: 1, h: 1 };
+
+      const box = document.getElementById('studio-crop-box');
+      box.style.left = `${crop.x * 100}%`;
+      box.style.top = `${crop.y * 100}%`;
+      box.style.width = `${crop.w * 100}%`;
+      box.style.height = `${crop.h * 100}%`;
+
+      document.getElementById('studio-crop-dims').textContent = `${(crop.w * 100).toFixed(1)}% × ${(crop.h * 100).toFixed(1)}%`;
+
+      // Render live cropped preview inside modal
+      const srcCanvas = document.getElementById('studio-crop-source-canvas');
+      const base = srcCanvas._baseCanvas || srcCanvas;
+      const liveCanvas = document.getElementById('studio-crop-live-canvas');
+
+      const sx = Math.round(crop.x * base.width);
+      const sy = Math.round(crop.y * base.height);
+      const sw = Math.max(1, Math.round(crop.w * base.width));
+      const sh = Math.max(1, Math.round(crop.h * base.height));
+
+      const outputMode = document.getElementById('comb-output-size')?.value || 'A4';
+      document.getElementById('studio-crop-size-lbl').textContent = `Output: ${outputMode}`;
+
+      const { pageW, pageH, drawW, drawH, offsetX, offsetY } = resolveOutputPageDimensions(sw, sh, outputMode);
+      const previewScale = 1.2;
+      liveCanvas.width = Math.round(pageW * previewScale);
+      liveCanvas.height = Math.round(pageH * previewScale);
+      const lCtx = liveCanvas.getContext('2d');
+      lCtx.fillStyle = '#ffffff';
+      lCtx.fillRect(0, 0, liveCanvas.width, liveCanvas.height);
+      lCtx.drawImage(
+        base,
+        sx, sy, sw, sh,
+        offsetX * previewScale, offsetY * previewScale, drawW * previewScale, drawH * previewScale
+      );
+
+      // Also update card in background
+      drawCombinedPreview(idx);
+    }
+
+    function setStudioModalPreset(preset) {
+      const p = combinedState.pages[combinedState.activeCropPageIdx];
+      if (!p) return;
+      if (preset === 'free') p.crop = { x: 0, y: 0, w: 1, h: 1 };
+      else if (preset === 'margin5') p.crop = { x: 0.05, y: 0.05, w: 0.90, h: 0.90 };
+      else if (preset === 'margin10') p.crop = { x: 0.10, y: 0.10, w: 0.80, h: 0.80 };
+      else if (preset === 'a4') {
+        const base = p.originalCanvas;
+        const targetRatio = 595.28 / 841.89;
+        const currRatio = base.width / base.height;
+        if (currRatio > targetRatio) {
+          const w = targetRatio / currRatio;
+          p.crop = { x: (1 - w) / 2, y: 0, w, h: 1 };
+        } else {
+          const h = currRatio / targetRatio;
+          p.crop = { x: 0, y: (1 - h) / 2, w: 1, h };
+        }
+      }
+      syncStudioCropModalUI();
+    }
+
+    function applyStudioModalCropToAll() {
+      const srcCrop = combinedState.pages[combinedState.activeCropPageIdx]?.crop;
+      if (!srcCrop) return;
+      combinedState.pages.forEach(p => {
+        p.crop = { ...srcCrop };
+      });
+      renderCombinedGrid();
+      showStatus('Applied crop box to all pages in All-in-One Studio!');
+    }
+
+    // =========================================================================
+    // DEDICATED MODULE 5: CROP PAGES WITH LIVE PREVIEW & UNIFIED OUTPUT SIZE
+    // =========================================================================
+    async function loadCropDocument(input) {
+      if (!input.files || input.files.length === 0) return;
+      const file = input.files[0];
+      cropState.file = file;
+      cropState.pages = [];
+      cropState.currentIdx = 0;
+
+      document.getElementById('crop-file-lbl').textContent = file.name;
+      document.getElementById('crop-controls').classList.remove('hidden');
+
+      try {
+        if (file.name.toLowerCase().endsWith('.pdf')) {
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            const page = await pdfDoc.getPage(i);
+            const viewport = page.getViewport({ scale: 1.8 });
+            const c = document.createElement('canvas');
+            c.width = viewport.width;
+            c.height = viewport.height;
+            await page.render({ canvasContext: c.getContext('2d'), viewport }).promise;
+            cropState.pages.push({
+              pageNum: i,
+              canvas: c,
+              crop: { x: 0, y: 0, w: 1, h: 1 }
+            });
+          }
+        } else {
+          const img = new Image();
+          img.src = URL.createObjectURL(file);
+          await new Promise(res => img.onload = res);
+          const c = document.createElement('canvas');
+          c.width = img.width;
+          c.height = img.height;
+          c.getContext('2d').drawImage(img, 0, 0);
+          cropState.pages.push({
+            pageNum: 1,
+            canvas: c,
+            crop: { x: 0, y: 0, w: 1, h: 1 }
+          });
+        }
+
+        selectCropPage(0);
+        renderCropThumbStrip();
+        log(`Loaded ${cropState.pages.length} page(s) into Crop Pages tool.`);
+      } catch (err) {
+        showStatus('Failed to load document for cropping: ' + err.message, true);
+      }
+    }
+
+    function selectCropPage(idx) {
+      if (idx < 0 || idx >= cropState.pages.length) return;
+      cropState.currentIdx = idx;
+      const pageObj = cropState.pages[idx];
+
+      document.getElementById('crop-page-indicator').textContent = `Page ${idx + 1} / ${cropState.pages.length}`;
+
+      const srcCanvas = document.getElementById('crop-source-canvas');
+      srcCanvas.width = pageObj.canvas.width;
+      srcCanvas.height = pageObj.canvas.height;
+      srcCanvas.getContext('2d').drawImage(pageObj.canvas, 0, 0);
+
+      syncCropOverlayUI();
+      renderCropLiveOutput();
+      renderCropThumbStrip();
+    }
+
+    function changeCropPage(delta) {
+      const next = cropState.currentIdx + delta;
+      if (next >= 0 && next < cropState.pages.length) {
+        selectCropPage(next);
+      }
+    }
+
+    function syncCropOverlayUI() {
+      const pageObj = cropState.pages[cropState.currentIdx];
+      if (!pageObj) return;
+      const { x, y, w, h } = pageObj.crop;
+
+      const box = document.getElementById('crop-overlay-box');
+      box.style.left = `${x * 100}%`;
+      box.style.top = `${y * 100}%`;
+      box.style.width = `${w * 100}%`;
+      box.style.height = `${h * 100}%`;
+
+      document.getElementById('crop-in-x').value = (x * 100).toFixed(1);
+      document.getElementById('crop-in-y').value = (y * 100).toFixed(1);
+      document.getElementById('crop-in-w').value = (w * 100).toFixed(1);
+      document.getElementById('crop-in-h').value = (h * 100).toFixed(1);
+
+      const pxW = Math.round(w * pageObj.canvas.width);
+      const pxH = Math.round(h * pageObj.canvas.height);
+      document.getElementById('crop-dim-info').textContent = `${(w * 100).toFixed(1)}% × ${(h * 100).toFixed(1)}% (${pxW}×${pxH} px)`;
+    }
+
+    function updateCropFromNumericInputs() {
+      const pageObj = cropState.pages[cropState.currentIdx];
+      if (!pageObj) return;
+
+      let x = parseFloat(document.getElementById('crop-in-x').value || 0) / 100;
+      let y = parseFloat(document.getElementById('crop-in-y').value || 0) / 100;
+      let w = parseFloat(document.getElementById('crop-in-w').value || 100) / 100;
+      let h = parseFloat(document.getElementById('crop-in-h').value || 100) / 100;
+
+      x = Math.min(Math.max(0, x), 0.95);
+      y = Math.min(Math.max(0, y), 0.95);
+      w = Math.min(Math.max(0.05, w), 1 - x);
+      h = Math.min(Math.max(0.05, h), 1 - y);
+
+      pageObj.crop = { x, y, w, h };
+      syncCropOverlayUI();
+      renderCropLiveOutput();
+    }
+
+    function setCropAspectPreset(preset) {
+      const pageObj = cropState.pages[cropState.currentIdx];
+      if (!pageObj) return;
+      const srcW = pageObj.canvas.width;
+      const srcH = pageObj.canvas.height;
+      const currRatio = srcW / srcH;
+
+      if (preset === 'free') {
+        pageObj.crop = { x: 0.05, y: 0.05, w: 0.9, h: 0.9 };
+      } else if (preset === 'a4p') {
+        const target = 595.28 / 841.89;
+        if (currRatio > target) {
+          const w = target / currRatio;
+          pageObj.crop = { x: (1 - w) / 2, y: 0, w, h: 1 };
+        } else {
+          const h = currRatio / target;
+          pageObj.crop = { x: 0, y: (1 - h) / 2, w: 1, h };
+        }
+      } else if (preset === 'a4l') {
+        const target = 841.89 / 595.28;
+        if (currRatio > target) {
+          const w = target / currRatio;
+          pageObj.crop = { x: (1 - w) / 2, y: 0, w, h: 1 };
+        } else {
+          const h = currRatio / target;
+          pageObj.crop = { x: 0, y: (1 - h) / 2, w: 1, h };
+        }
+      }
+      syncCropOverlayUI();
+      renderCropLiveOutput();
+    }
+
+    function resetCurrentPageCrop() {
+      const pageObj = cropState.pages[cropState.currentIdx];
+      if (!pageObj) return;
+      pageObj.crop = { x: 0, y: 0, w: 1, h: 1 };
+      syncCropOverlayUI();
+      renderCropLiveOutput();
+    }
+
+    function applyCurrentCropToAllPages() {
+      const pageObj = cropState.pages[cropState.currentIdx];
+      if (!pageObj) return;
+      const ref = { ...pageObj.crop };
+      cropState.pages.forEach(p => { p.crop = { ...ref }; });
+      renderCropThumbStrip();
+      showStatus(`Applied current crop box to all ${cropState.pages.length} pages!`);
+    }
+
+    function renderCropLiveOutput() {
+      const pageObj = cropState.pages[cropState.currentIdx];
+      if (!pageObj) return;
+
+      const outSizeMode = document.getElementById('crop-output-size')?.value || 'A4';
+      const badge = document.getElementById('crop-live-target-badge');
+      if (badge) badge.textContent = `Output: ${outSizeMode.toUpperCase()}`;
+
+      const { x, y, w, h } = pageObj.crop;
+      const src = pageObj.canvas;
+      const sx = Math.round(x * src.width);
+      const sy = Math.round(y * src.height);
+      const sw = Math.max(1, Math.round(w * src.width));
+      const sh = Math.max(1, Math.round(h * src.height));
+
+      const previewCanvas = document.getElementById('crop-live-preview-canvas');
+      let pageW, pageH, drawW, drawH, offsetX, offsetY;
+
+      if (outSizeMode === 'original') {
+        pageW = src.width;
+        pageH = src.height;
+        const scale = Math.min(pageW / sw, pageH / sh);
+        drawW = sw * scale;
+        drawH = sh * scale;
+        offsetX = (pageW - drawW) / 2;
+        offsetY = (pageH - drawH) / 2;
+      } else if (outSizeMode === 'cropped') {
+        pageW = sw;
+        pageH = sh;
+        drawW = sw;
+        drawH = sh;
+        offsetX = 0;
+        offsetY = 0;
+      } else {
+        const dims = resolveOutputPageDimensions(sw, sh, outSizeMode);
+        pageW = dims.pageW * 1.4;
+        pageH = dims.pageH * 1.4;
+        drawW = dims.drawW * 1.4;
+        drawH = dims.drawH * 1.4;
+        offsetX = dims.offsetX * 1.4;
+        offsetY = dims.offsetY * 1.4;
+      }
+
+      previewCanvas.width = Math.round(pageW);
+      previewCanvas.height = Math.round(pageH);
+      const ctx = previewCanvas.getContext('2d');
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, previewCanvas.width, previewCanvas.height);
+      ctx.drawImage(src, sx, sy, sw, sh, offsetX, offsetY, drawW, drawH);
+    }
+
+    function renderCropThumbStrip() {
+      const strip = document.getElementById('crop-thumbs-strip');
+      if (!strip) return;
+      strip.innerHTML = '';
+
+      cropState.pages.forEach((p, idx) => {
+        const active = idx === cropState.currentIdx;
+        const cropped = isPageCropped(p.crop);
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.onclick = () => selectCropPage(idx);
+        btn.className = `px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 flex-shrink-0 border transition ${
+          active
+            ? 'bg-indigo-600 text-white border-indigo-400 shadow'
+            : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+        }`;
+        btn.innerHTML = `
+          <span>Page ${p.pageNum}</span>
+          ${cropped ? '<span class="w-2 h-2 rounded-full bg-emerald-400"></span>' : ''}
+        `;
+        strip.appendChild(btn);
+      });
+    }
+
+    async function exportCroppedPdf(passToStudio = false) {
+      if (cropState.pages.length === 0) return showStatus('Please load a PDF or image file first.', true);
+      const outSizeMode = document.getElementById('crop-output-size')?.value || 'A4';
+      log(`Exporting ${cropState.pages.length} cropped page(s) to ${outSizeMode}...`);
+
+      try {
+        const newPdf = await PDFLib.PDFDocument.create();
+
+        for (let i = 0; i < cropState.pages.length; i++) {
+          const p = cropState.pages[i];
+          const src = p.canvas;
+          const { x, y, w, h } = p.crop;
+
+          const sx = Math.round(x * src.width);
+          const sy = Math.round(y * src.height);
+          const sw = Math.max(1, Math.round(w * src.width));
+          const sh = Math.max(1, Math.round(h * src.height));
+
+          const cropCanvas = document.createElement('canvas');
+          cropCanvas.width = sw;
+          cropCanvas.height = sh;
+          const ctx = cropCanvas.getContext('2d');
+          ctx.fillStyle = '#ffffff';
+          ctx.fillRect(0, 0, sw, sh);
+          ctx.drawImage(src, sx, sy, sw, sh, 0, 0, sw, sh);
+
+          const jpgBytes = await fetch(cropCanvas.toDataURL('image/jpeg', 0.92)).then(r => r.arrayBuffer());
+          const embeddedImg = await newPdf.embedJpg(jpgBytes);
+
+          let pageW, pageH, drawW, drawH, offsetX, offsetY;
+          if (outSizeMode === 'original') {
+            pageW = src.width / 1.8;
+            pageH = src.height / 1.8;
+            const scale = Math.min(pageW / sw, pageH / sh);
+            drawW = sw * scale;
+            drawH = sh * scale;
+            offsetX = (pageW - drawW) / 2;
+            offsetY = (pageH - drawH) / 2;
+          } else if (outSizeMode === 'cropped') {
+            pageW = sw / 1.8;
+            pageH = sh / 1.8;
+            drawW = pageW;
+            drawH = pageH;
+            offsetX = 0;
+            offsetY = 0;
+          } else {
+            const dims = resolveOutputPageDimensions(sw, sh, outSizeMode);
+            pageW = dims.pageW;
+            pageH = dims.pageH;
+            drawW = dims.drawW;
+            drawH = dims.drawH;
+            offsetX = dims.offsetX;
+            offsetY = dims.offsetY;
+          }
+
+          const pdfPage = newPdf.addPage([pageW, pageH]);
+          pdfPage.drawImage(embeddedImg, { x: offsetX, y: offsetY, width: drawW, height: drawH });
+        }
+
+        const outBytes = await newPdf.save();
+        const baseName = cropState.file.name.replace(/\.[^/.]+$/, '');
+
+        if (passToStudio) {
+          const croppedFile = new File([outBytes], `${baseName}_cropped.pdf`, { type: 'application/pdf' });
+          switchTab('combined');
+          await loadDocumentDirectlyIntoStudio(croppedFile);
+          showStatus('Cropped document passed to All-in-One Studio!');
+        } else {
+          downloadBlob(outBytes, `${baseName}_cropped_${outSizeMode}.pdf`);
+          showStatus(`Cropped PDF (${outSizeMode}) exported successfully!`);
+        }
+      } catch (err) {
+        log(`Crop export error: ${err.message}`);
+        showStatus('Failed to export cropped PDF: ' + err.message, true);
+      }
     }
 
     // ==========================================
-    // OTHER MODULE LOGIC
+    // OTHER MODULE LOGIC (DESKEW, SPLIT, ROTATE, DELETE)
     // ==========================================
     function computePageDeskew(sourceCanvas) {
       const fullW = sourceCanvas.width;
